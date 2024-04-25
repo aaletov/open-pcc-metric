@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "open-pcc-metric"
+version = "0.1.0"
+description = ""
+authors = ["aapozd <aapozdnyakove@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.1.7"
+open3d = "^0.18.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
