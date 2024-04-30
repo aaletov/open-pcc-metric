@@ -32,7 +32,7 @@ def nniterator(
     kdtree: o3d.geometry.KDTreeFlann,
     n: int,
 ) -> typing.Generator[typing.Tuple[int, int, np.float64], None, None]:
-    points = np.asarray(search_cloud.points)
+    points = np.asarray(iter_cloud.points)
     for i in range(points.shape[0]):
         [k, j, dist] = get_ith_nearest(points[i], kdtree, i=n)
         yield (i, j, dist)
