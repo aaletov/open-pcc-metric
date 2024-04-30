@@ -47,7 +47,7 @@ def calcullisimmo(
     color_sse_left = np.zeros(shape=(3,))
 
     for [i, j, dist] in nniterator(ocloud, pcloud, ptree, 0):
-        geo_sse_left += dist**2
+        geo_sse_left += dist
         color_diff = ocloud.colors[i] - pcloud.colors[j]
         color_sse_left += np.power(color_diff, (2, 2, 2))
 
@@ -58,27 +58,27 @@ def calcullisimmo(
     color_sse_right = np.zeros(shape=(3,))
 
     for [i, j, dist] in nniterator(pcloud, ocloud, otree, 0):
-        geo_sse_right += dist**2
+        geo_sse_right += dist
         color_diff = pcloud.colors[i] - ocloud.colors[j]
         color_sse_right += np.power(color_diff, (2, 2, 2))
 
     # Iterate over O, search in O
-    max_geo_dist = np.finfo(np.float64).min
-    min_geo_dist = np.finfo(np.float64).max
+    max_geo_sqrdist = np.finfo(np.float64).min
+    min_geo_sqrdist = np.finfo(np.float64).max
 
-    for [i, j, dist] in nniterator(ocloud, ocloud, otree, 1):
-        if dist > max_geo_dist:
-            max_geo_dist = dist
+    for [i, j, sqrdist] in nniterator(ocloud, ocloud, otree, 1):
+        if sqrdist > max_geo_sqrdist:
+            max_geo_sqrdist = sqrdist
 
-        if dist < min_geo_dist:
-            min_geo_dist = dist
+        if sqrdist < min_geo_sqrdist:
+            min_geo_sqrdist = sqrdist
 
     return {
         "left_geometric_sse": geo_sse_left,
         "right_geometric_sse": geo_sse_right,
         "left_color_sse": color_sse_left,
         "right_color_sse": color_sse_right,
-        "max_geo_dist": max_geo_dist,
+        "max_geo_dist": np.sqrt(max_geo_sqrdist),
     }
 
 def calcullopollo(
