@@ -44,10 +44,12 @@ def calcullisimmo(
     # Iterate over O, search in P
     ptree = o3d.geometry.KDTreeFlann(pcloud)
     geo_sse_left = 0
+    points_num_left = 0
     color_sse_left = np.zeros(shape=(3,))
 
     for [i, j, dist] in nniterator(ocloud, pcloud, ptree, 0):
         geo_sse_left += dist
+        points_num_left += 1
         color_diff = ocloud.colors[i] - pcloud.colors[j]
         color_sse_left += np.power(color_diff, (2, 2, 2))
 
@@ -55,10 +57,12 @@ def calcullisimmo(
 
     otree = o3d.geometry.KDTreeFlann(ocloud)
     geo_sse_right = 0
+    points_num_right = 0
     color_sse_right = np.zeros(shape=(3,))
 
     for [i, j, dist] in nniterator(pcloud, ocloud, otree, 0):
         geo_sse_right += dist
+        points_num_right += 1
         color_diff = pcloud.colors[i] - ocloud.colors[j]
         color_sse_right += np.power(color_diff, (2, 2, 2))
 
@@ -74,10 +78,10 @@ def calcullisimmo(
             min_geo_sqrdist = sqrdist
 
     return {
-        "left_geometric_sse": geo_sse_left,
-        "right_geometric_sse": geo_sse_right,
-        "left_color_sse": color_sse_left,
-        "right_color_sse": color_sse_right,
+        "left_geometric_mse": geo_sse_left / points_num_left,
+        "right_geometric_mse": geo_sse_right / points_num_right,
+        "left_color_mse": color_sse_left / points_num_left,
+        "right_color_mse": color_sse_right / points_num_right,
         "max_geo_dist": np.sqrt(max_geo_sqrdist),
     }
 
