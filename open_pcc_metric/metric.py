@@ -19,7 +19,7 @@ class AbstractFoldMetric(abc.ABC):
         raise NotImplementedError()
 
 def get_ith_nearest(
-    point: np.array,
+    point: np.ndarray,
     kdtree: o3d.geometry.KDTreeFlann,
     i: int,
     ) -> typing.Tuple[int, int, np.float64]:
