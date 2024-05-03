@@ -13,18 +13,73 @@ import open3d as o3d
 #
 # Both cumulative and max metrics are kind of fold-accumulate
 
+# Maybe work with chunks?
+
 class AbstractFoldMetric(abc.ABC):
     @abc.abstractmethod
-    def add_point(self, opoint: np.array, ppoint: np.array, dist: np.float64) -> None:
+    def add_point(
+        self,
+        lpoint: np.ndarray[typing.Any, typing.Any],
+        rpoint: np.ndarray[typing.Any, typing.Any],
+        sqrdist: np.float64,
+    ) -> None:
         raise NotImplementedError()
 
-def get_ith_nearest(
-    point: np.ndarray,
-    kdtree: o3d.geometry.KDTreeFlann,
-    i: int,
-    ) -> typing.Tuple[int, int, np.float64]:
-    [k, idx, dist] = kdtree.search_knn_vector_3d(point, i + 1)
-    return (k, idx[-1], dist[-1])
+class MaxGeoSqrDist(AbstractFoldMetric):
+    LABEL = "MaxGeoSqrDist"
+    value: np.float64 = np.finfo(np.float64).min
+
+    def add_point(
+        self,
+        lpoint: np.ndarray[typing.Any, typing.Any],
+        rpoint: np.ndarray[typing.Any, typing.Any],
+        sqrdist: np.floating[np.float64],
+        ) -> None:
+        if sqrdist > self.value:
+            self.value = sqrdist
+
+class MinGeoSqrDist(AbstractFoldMetric):
+    LABEL = "MinGeoSqrDist"
+    value: np.float64 = np.finfo(np.float64).max
+
+    def add_point(
+        self,
+        lpoint: np.ndarray[typing.Any, typing.Any],
+        rpoint: np.ndarray[typing.Any, typing.Any],
+        sqrdist: np.floating[np.float64],
+        ) -> None:
+        if sqrdist < self.value:
+            self.value = sqrdist
+
+class GeoSSE(AbstractFoldMetric):
+    LABEL = "GeoSSE"
+    value: np.float64 = 0
+    num: int = 0
+
+    def add_point(
+        self,
+        lpoint: np.ndarray[typing.Any, typing.Any],
+        rpoint: np.ndarray[typing.Any, typing.Any],
+        sqrdist: np.floating[np.float64],
+        ) -> None:
+        self.value += sqrdist
+        self.num += 1
+
+class ColorSSE(AbstractFoldMetric):
+    LABEL = "ColorSSE"
+    value: np.ndarray[typing.Any, typing.Any] = np.zeros(shape=(3,))
+    num: int = 0
+
+    def add_point(
+        self,
+        lpoint: np.ndarray[typing.Any, typing.Any],
+        rpoint: np.ndarray[typing.Any, typing.Any],
+        sqrdist: np.floating[np.float64],
+        ) -> None:
+        # i = 1 stores color vector
+        err = lpoint[1] - rpoint[1]
+        self.value += np.power(err, (2, 2, 2))
+        self.num += 1
 
 def nniterator(
     iter_cloud: o3d.geometry.PointCloud,
@@ -32,58 +87,60 @@ def nniterator(
     kdtree: o3d.geometry.KDTreeFlann,
     n: int,
 ) -> typing.Generator[typing.Tuple[int, int, np.float64], None, None]:
-    points = np.asarray(iter_cloud.points)
-    for i in range(points.shape[0]):
-        [k, j, dist] = get_ith_nearest(points[i], kdtree, i=n)
-        yield (i, j, dist)
+    """_summary_
+
+    Args:
+        iter_cloud (o3d.geometry.PointCloud): A cloud to iterate over
+        search_cloud (o3d.geometry.PointCloud): A cloud for search
+        kdtree (o3d.geometry.KDTreeFlann): KDTreeFlann of search_cloud
+        n (int): Order of neighbour to search (0 - point itself)
+
+    Returns:
+        typing.Generator[typing.Tuple[int, int, np.float64], None, None]: _description_
+
+    Yields:
+        Iterator[typing.Generator[typing.Tuple[int, int, np.float64], None, None]]: _description_
+    """
+    ipoints = np.asarray(iter_cloud.points)
+    spoints = np.asarray(search_cloud.points)
+    for i in range(ipoints.shape[0]):
+        [k, idx, dists] = kdtree.search_knn_vector_3d(ipoints[i], n + 1)
+        j = idx[-1]
+        dist = dists[-1]
+        lpoint = np.stack([ipoints[i], iter_cloud.colors[i]])
+        rpoint = np.stack([spoints[j], search_cloud.colors[j]])
+        yield (lpoint, rpoint, dist)
 
 def calcullisimmo(
     ocloud: o3d.geometry.PointCloud,
     pcloud: o3d.geometry.PointCloud,
     ) -> typing.Dict[str, np.float64]:
     # Iterate over O, search in P
-    ptree = o3d.geometry.KDTreeFlann(pcloud)
-    geo_sse_left = 0
-    points_num_left = 0
-    color_sse_left = np.zeros(shape=(3,))
 
-    for [i, j, dist] in nniterator(ocloud, pcloud, ptree, 0):
-        geo_sse_left += dist
-        points_num_left += 1
-        color_diff = ocloud.colors[i] - pcloud.colors[j]
-        color_sse_left += np.power(color_diff, (2, 2, 2))
+    ptree = o3d.geometry.KDTreeFlann(pcloud)
+    lmetrics = (GeoSSE(), ColorSSE())
+
+    for [lpoint, rpoint, dist] in nniterator(ocloud, pcloud, ptree, 0):
+        for metric in lmetrics:
+            metric.add_point(lpoint, rpoint, dist)
 
     # Iterate over P, search in O
 
     otree = o3d.geometry.KDTreeFlann(ocloud)
-    geo_sse_right = 0
-    points_num_right = 0
-    color_sse_right = np.zeros(shape=(3,))
+    rmetrics = (GeoSSE(), ColorSSE())
 
-    for [i, j, dist] in nniterator(pcloud, ocloud, otree, 0):
-        geo_sse_right += dist
-        points_num_right += 1
-        color_diff = pcloud.colors[i] - ocloud.colors[j]
-        color_sse_right += np.power(color_diff, (2, 2, 2))
+    for [lpoint, rpoint, dist] in nniterator(pcloud, ocloud, otree, 0):
+        for metric in rmetrics:
+            metric.add_point(lpoint, rpoint, dist)
 
     # Iterate over O, search in O
-    max_geo_sqrdist = np.finfo(np.float64).min
-    min_geo_sqrdist = np.finfo(np.float64).max
+    self_metrics = (MaxGeoSqrDist(), MinGeoSqrDist())
 
-    for [i, j, sqrdist] in nniterator(ocloud, ocloud, otree, 1):
-        if sqrdist > max_geo_sqrdist:
-            max_geo_sqrdist = sqrdist
+    for [lpoint, rpoint, sqrdist] in nniterator(ocloud, ocloud, otree, 1):
+        for metric in self_metrics:
+            metric.add_point(lpoint, rpoint, sqrdist)
 
-        if sqrdist < min_geo_sqrdist:
-            min_geo_sqrdist = sqrdist
-
-    return {
-        "left_geometric_mse": geo_sse_left / points_num_left,
-        "right_geometric_mse": geo_sse_right / points_num_right,
-        "left_color_mse": color_sse_left / points_num_left,
-        "right_color_mse": color_sse_right / points_num_right,
-        "max_geo_dist": np.sqrt(max_geo_sqrdist),
-    }
+    return self_metrics + lmetrics + rmetrics
 
 def calcullopollo(
     ocloud_file: str,

@@ -7,5 +7,5 @@ def cli(ocloud: str, pcloud: str) -> None:
     from . import metric
 
     metrics = metric.calcullopollo(ocloud_file=ocloud, pcloud_file=pcloud)
-    for key, value in metrics.items():
-        print("{key}: {value}".format(key=key, value=value))
+    for m in metrics:
+        print("{key}: {value}".format(key=m.LABEL, value=m.value))
