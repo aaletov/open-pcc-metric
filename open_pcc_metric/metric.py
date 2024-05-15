@@ -136,7 +136,7 @@ def get_boundary_square_dist(
         SimpleMetric(np.max(inner_dists), "MaxGeoSqrtDist"),
     )
 
-def calcullisimmo(
+def calculate(
     origin_cloud: o3d.geometry.PointCloud,
     processed_cloud: o3d.geometry.PointCloud,
     ) -> typing.Dict[str, np.float64]:
@@ -173,9 +173,9 @@ def calcullisimmo(
     self_metrics = get_boundary_square_dist(origin_cloud)
     return self_metrics + lmetrics + rmetrics
 
-def calcullopollo(
+def calculate_from_files(
     ocloud_file: str,
     pcloud_file: str,
     ) -> typing.Dict[str, np.float64]:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
-    return calcullisimmo(ocloud, pcloud)
+    return calculate(ocloud, pcloud)

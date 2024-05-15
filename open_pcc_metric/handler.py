@@ -6,6 +6,6 @@ import click
 def cli(ocloud: str, pcloud: str) -> None:
     from . import metric
 
-    metrics = metric.calcullopollo(ocloud_file=ocloud, pcloud_file=pcloud)
+    metrics = metric.calculate_from_files(ocloud_file=ocloud, pcloud_file=pcloud)
     for m in metrics:
         print("{key}: {value}".format(key=m.LABEL, value=m.value))
