@@ -73,53 +73,75 @@ class CloudPair:
         neigh_cloud.colors = o3d.utility.Vector3dVector(neigh_colors)
         return (neigh_cloud, sqrdists)
 
-class AbstractPrimaryMetric(abc.ABC):
+class PrimaryMetric(abc.ABC):
+    label: str
     value: typing.Any
 
     @abc.abstractmethod
     def calculate(self, cloud_pair: CloudPair):
         raise NotImplementedError("calculate is not implmented")
 
-class BoundarySqrtDistances(AbstractPrimaryMetric):
+    def __str__(self) -> str:
+        return "{label}: {value}".format(label=self.label, value=str(self.value))
+
+class OrderedMetric(PrimaryMetric):
+    is_left: bool
+
+    def __init__(self, is_left: bool):
+        self.is_left = is_left
+
+    def __str__(self) -> str:
+        order = "left" if self.is_left else "right"
+        return "{label}({order}): {value}".format(
+            label=self.label,
+            order=order,
+            value=self.value,
+        )
+
+class BoundarySqrtDistances(PrimaryMetric):
+    label = "BoundarySqrtDistances"
+
     def calculate(self, cloud_pair: CloudPair):
         inner_dists = cloud_pair.origin_cloud.compute_nearest_neighbor_distance()
         self.value = (np.min(inner_dists), np.max(inner_dists))
 
-class GeoMSE(AbstractPrimaryMetric):
-    is_left: bool
-
-    def __init__(self, is_left: bool):
-        self.is_left = is_left
+class GeoMSE(OrderedMetric):
+    label = "GeoMSE"
 
     def calculate(self, cloud_pair: CloudPair):
-        sse = np.sum(cloud_pair._origin_neigh_dists, axis=0)
+        sse = 0
+        if self.is_left:
+            sse = np.sum(cloud_pair._origin_neigh_dists, axis=0)
+        else:
+            sse = np.sum(cloud_pair._reconst_neigh_dists, axis=0)
         n = cloud_pair._origin_neigh_dists.shape[0]
         self.value = sse / n
 
-class ColorMSE(AbstractPrimaryMetric):
-    is_left: bool
-
-    def __init__(self, is_left: bool):
-        self.is_left = is_left
+class ColorMSE(OrderedMetric):
+    label = "ColorMSE"
 
     def calculate(self, cloud_pair: CloudPair):
-        diff = np.subtract(cloud_pair.origin_cloud.colors, cloud_pair._origin_neigh_cloud.colors)
+        diff = 0
+        if self.is_left:
+            diff = np.subtract(cloud_pair.origin_cloud.colors, cloud_pair._origin_neigh_cloud.colors)
+        else:
+            diff = np.subtract(cloud_pair.reconst_cloud.colors, cloud_pair._reconst_neigh_cloud.colors)
         self.value = np.mean(diff**2, axis=0)
 
 class CalculateResult:
-    _metrics: typing.List[AbstractPrimaryMetric]
+    _metrics: typing.List[PrimaryMetric]
 
-    def __init__(self, metrics: typing.List[AbstractPrimaryMetric]):
+    def __init__(self, metrics: typing.List[PrimaryMetric]):
         self._metrics = metrics
 
     def __str__(self) -> str:
         mnamer = lambda m: str(m.__class__.__name__)
-        return "\n".join([mnamer(metric) + " " + str(metric.value) for metric in self._metrics])
+        return "\n".join([str(metric) for metric in self._metrics])
 
 class MetricCalculator:
-    _metrics: typing.List[AbstractPrimaryMetric]
+    _metrics: typing.List[PrimaryMetric]
 
-    def __init__(self, metrics: typing.List[AbstractPrimaryMetric]):
+    def __init__(self, metrics: typing.List[PrimaryMetric]):
         self._metrics = metrics
 
     def calculate(self, cloud_pair: CloudPair) -> CalculateResult:
