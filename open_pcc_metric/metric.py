@@ -73,16 +73,17 @@ class CloudPair:
         neigh_cloud.colors = o3d.utility.Vector3dVector(neigh_colors)
         return (neigh_cloud, sqrdists)
 
-class PrimaryMetric(abc.ABC):
+class AbstractMetric(abc.ABC):
     label: str
     value: typing.Any
 
+    def __str__(self) -> str:
+        return "{label}: {value}".format(label=self.label, value=str(self.value))
+
+class PrimaryMetric(AbstractMetric):
     @abc.abstractmethod
     def calculate(self, cloud_pair: CloudPair):
         raise NotImplementedError("calculate is not implmented")
-
-    def __str__(self) -> str:
-        return "{label}: {value}".format(label=self.label, value=str(self.value))
 
 class OrderedMetric(PrimaryMetric):
     is_left: bool
@@ -98,12 +99,45 @@ class OrderedMetric(PrimaryMetric):
             value=self.value,
         )
 
+class SecondaryMetric(AbstractMetric):
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        raise NotImplementedError("calculate is not implmented")
+
 class BoundarySqrtDistances(PrimaryMetric):
     label = "BoundarySqrtDistances"
 
     def calculate(self, cloud_pair: CloudPair):
         inner_dists = cloud_pair.origin_cloud.compute_nearest_neighbor_distance()
         self.value = (np.min(inner_dists), np.max(inner_dists))
+
+def get_metric_by_label(
+    metrics: typing.List[AbstractMetric],
+    label: str,
+) -> typing.Optional[AbstractMetric]:
+    for m in metrics:
+        if m.label == label:
+            return m
+    return None
+
+class MinSqrtDistance(SecondaryMetric):
+    label = "MinSqrtDistance"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        boundary_metric = get_metric_by_label(metrics, "BoundarySqrtDistances")
+        if boundary_metric is None:
+            return False
+        self.value = boundary_metric.value[0]
+        return True
+
+class MaxSqrtDistance(SecondaryMetric):
+    label = "MaxSqrtDistance"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        boundary_metric = get_metric_by_label(metrics, "BoundarySqrtDistances")
+        if boundary_metric is None:
+            return False
+        self.value = boundary_metric.value[1]
+        return True
 
 class GeoMSE(OrderedMetric):
     label = "GeoMSE"
@@ -135,20 +169,33 @@ class CalculateResult:
         self._metrics = metrics
 
     def __str__(self) -> str:
-        mnamer = lambda m: str(m.__class__.__name__)
         return "\n".join([str(metric) for metric in self._metrics])
 
 class MetricCalculator:
-    _metrics: typing.List[PrimaryMetric]
+    _primary_metrics: typing.List[PrimaryMetric]
+    _secondary_metrics: typing.List[SecondaryMetric]
 
-    def __init__(self, metrics: typing.List[PrimaryMetric]):
-        self._metrics = metrics
+    def __init__(
+        self,
+        primary_metrics: typing.List[PrimaryMetric],
+        secondary_metrics: typing.List[SecondaryMetric],
+    ):
+        self._primary_metrics = primary_metrics
+        self._secondary_metrics = secondary_metrics
 
     def calculate(self, cloud_pair: CloudPair) -> CalculateResult:
-        for metric in self._metrics:
+        for metric in self._primary_metrics:
             metric.calculate(cloud_pair)
 
-        return CalculateResult(self._metrics)
+        metrics_to_calculate = self._secondary_metrics
+        while metrics_to_calculate != []:
+            new_to_calculate = []
+            for metric in metrics_to_calculate:
+                if not metric.calculate(self._primary_metrics + self._secondary_metrics):
+                    new_to_calculate.append(metric)
+            metrics_to_calculate = new_to_calculate
+
+        return CalculateResult(self._primary_metrics + self._secondary_metrics)
 
 def calculate_from_files(
     ocloud_file: str,
@@ -156,12 +203,17 @@ def calculate_from_files(
     ) -> typing.Dict[str, np.float64]:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
     cloud_pair = CloudPair(ocloud, pcloud)
-    calculator = MetricCalculator([
+    primary_metrics = [
         BoundarySqrtDistances(),
         GeoMSE(is_left=True),
         GeoMSE(is_left=False),
         ColorMSE(is_left=True),
         ColorMSE(is_left=False),
-    ])
+    ]
+    secondary_metrics = [
+        MinSqrtDistance(),
+        MaxSqrtDistance(),
+    ]
+    calculator = MetricCalculator(primary_metrics=primary_metrics, secondary_metrics=secondary_metrics)
 
     return calculator.calculate(cloud_pair)
