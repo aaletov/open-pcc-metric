@@ -110,22 +110,22 @@ class BoundarySqrtDistances(PrimaryMetric):
         inner_dists = cloud_pair.origin_cloud.compute_nearest_neighbor_distance()
         self.value = (np.min(inner_dists), np.max(inner_dists))
 
-def get_metric_by_label(
+def get_metrics_by_label(
     metrics: typing.List[AbstractMetric],
     label: str,
-) -> typing.Optional[AbstractMetric]:
-    for m in metrics:
-        if m.label == label:
-            return m
-    return None
+) -> typing.List[AbstractMetric]:
+    return list(filter(lambda m: m.label == label, metrics))
 
 class MinSqrtDistance(SecondaryMetric):
     label = "MinSqrtDistance"
 
     def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
-        boundary_metric = get_metric_by_label(metrics, "BoundarySqrtDistances")
-        if boundary_metric is None:
+        res = get_metrics_by_label(metrics, "BoundarySqrtDistances")
+        if len(res) == 0:
             return False
+        if len(res) > 1:
+            raise RuntimeError("Should not be more than one BoundarySqrtDistance metric")
+        boundary_metric = res[0]
         self.value = boundary_metric.value[0]
         return True
 
@@ -133,9 +133,12 @@ class MaxSqrtDistance(SecondaryMetric):
     label = "MaxSqrtDistance"
 
     def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
-        boundary_metric = get_metric_by_label(metrics, "BoundarySqrtDistances")
-        if boundary_metric is None:
+        res = get_metrics_by_label(metrics, "BoundarySqrtDistances")
+        if len(res) == 0:
             return False
+        if len(res) > 1:
+            raise RuntimeError("Should not be more than one BoundarySqrtDistance metric")
+        boundary_metric = res[0]
         self.value = boundary_metric.value[1]
         return True
 
@@ -162,6 +165,29 @@ class ColorMSE(OrderedMetric):
             diff = np.subtract(cloud_pair.reconst_cloud.colors, cloud_pair._reconst_neigh_cloud.colors)
         self.value = np.mean(diff**2, axis=0)
 
+class SymmetricMetric(SecondaryMetric):
+    is_proportional: bool
+    target_label: str
+
+    def __init__(self, label: str, is_proportional: bool, target_label: str):
+        self.label = label
+        self.is_proportional = is_proportional
+        self.target_label = target_label
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        metrics = get_metrics_by_label(metrics, self.target_label)
+        if len(metrics) != 2:
+            raise RuntimeError("Must be exactly 2 ordered metrics")
+        values = [m.value for m in metrics] # value is scalar or ndarray
+        if self.is_proportional:
+            self.value = min(values, key=np.linalg.norm)
+        else:
+            self.value = max(values, key=np.linalg.norm)
+        return True
+
+    def __str__(self) -> str:
+        return "{label}: {value}".format(label=self.label, value=self.value)
+
 class CalculateResult:
     _metrics: typing.List[PrimaryMetric]
 
@@ -187,13 +213,17 @@ class MetricCalculator:
         for metric in self._primary_metrics:
             metric.calculate(cloud_pair)
 
-        metrics_to_calculate = self._secondary_metrics
-        while metrics_to_calculate != []:
-            new_to_calculate = []
-            for metric in metrics_to_calculate:
-                if not metric.calculate(self._primary_metrics + self._secondary_metrics):
-                    new_to_calculate.append(metric)
-            metrics_to_calculate = new_to_calculate
+        calculated_metrics = []
+        not_calculated_metrics = self._secondary_metrics
+        while not_calculated_metrics != []:
+            new_not_calculated_metrics = []
+            for metric in not_calculated_metrics:
+                if metric.calculate(self._primary_metrics + calculated_metrics):
+                    calculated_metrics.append(metric)
+                else:
+                    new_not_calculated_metrics.append(metric)
+
+            not_calculated_metrics = new_not_calculated_metrics
 
         return CalculateResult(self._primary_metrics + self._secondary_metrics)
 
@@ -213,6 +243,16 @@ def calculate_from_files(
     secondary_metrics = [
         MinSqrtDistance(),
         MaxSqrtDistance(),
+        SymmetricMetric(
+            label="GeoMSE(symmetric)",
+            is_proportional=False,
+            target_label="GeoMSE",
+        ),
+        SymmetricMetric(
+            label="ColorMSE(symmetric)",
+            is_proportional=False,
+            target_label="ColorMSE",
+        )
     ]
     calculator = MetricCalculator(primary_metrics=primary_metrics, secondary_metrics=secondary_metrics)
 
