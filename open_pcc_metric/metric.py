@@ -15,83 +15,6 @@ import open3d as o3d
 
 # Maybe work with chunks?
 
-class NumPyPointCloud:
-    points: np.ndarray[typing.Any, typing.Any]
-    colors: np.ndarray[typing.Any, typing.Any]
-
-    def __init__(
-        self,
-        points: np.ndarray[typing.Any, typing.Any],
-        colors: np.ndarray[typing.Any, typing.Any],
-    ):
-        self.points = points
-        self.colors = colors
-
-class NumPyNeighbourCloud:
-    _origin_cloud: NumPyPointCloud
-    cloud: NumPyPointCloud # neighbour cloud
-    sqrdists: np.ndarray
-
-    def __init__(
-        self,
-        origin_cloud: NumPyPointCloud,
-        cloud: NumPyPointCloud,
-        sqrdists: np.ndarray,
-    ):
-        self._origin_cloud = origin_cloud
-        self.cloud = cloud
-        self.sqrdists = sqrdists
-
-def read_numpy_point_cloud(cloud: o3d.geometry.PointCloud) -> NumPyPointCloud:
-    return NumPyPointCloud(
-        points=np.asarray(cloud.points),
-        colors=np.asarray(cloud.colors),
-    )
-
-class AbstractFoldMetric(abc.ABC):
-    @abc.abstractmethod
-    def add_points(
-        self,
-        origin_cloud: NumPyPointCloud,
-        neighbour_cloud: NumPyNeighbourCloud,
-    ) -> None:
-        raise NotImplementedError()
-
-# class MaxGeoSqrDist:
-#     LABEL = "MaxGeoSqrDist"
-#     value: np.float64 = np.finfo(np.float64).min
-
-# class MinGeoSqrDist:
-#     LABEL = "MinGeoSqrDist"
-#     value: np.float64 = np.finfo(np.float64).max
-
-class GeoSSE(AbstractFoldMetric):
-    LABEL = "GeoSSE"
-    value: np.float64 = 0
-    num: int = 0
-
-    def add_points(
-        self,
-        origin_cloud: NumPyPointCloud,
-        neighbour_cloud: NumPyNeighbourCloud,
-    ) -> None:
-        self.value += np.sum(neighbour_cloud.sqrdists, axis=0)
-        self.num += neighbour_cloud.sqrdists.shape[0]
-
-class ColorSSE(AbstractFoldMetric):
-    LABEL = "ColorSSE"
-    value: np.ndarray[typing.Any, typing.Any] = np.zeros(shape=(3,))
-    num: int = 0
-
-    def add_points(
-        self,
-        origin_cloud: NumPyPointCloud,
-        neighbour_cloud: NumPyNeighbourCloud,
-    ) -> None:
-        err = neighbour_cloud.cloud.colors - origin_cloud.colors
-        self.value += np.sum(np.power(err, 2), axis=0)
-        self.num += err.shape[0]
-
 def get_neighbour(
     point: np.ndarray,
     kdtree: o3d.geometry.KDTreeFlann,
@@ -101,81 +24,93 @@ def get_neighbour(
     return np.array((idx[-1], dists[-1]))
 
 def get_neighbour_cloud(
-    iter_cloud: NumPyPointCloud,
-    search_cloud: NumPyPointCloud,
+    iter_cloud: o3d.geometry.PointCloud,
+    search_cloud: o3d.geometry.PointCloud,
     kdtree: o3d.geometry.KDTreeFlann,
     n: int,
-) -> NumPyNeighbourCloud:
+) -> typing.Tuple[o3d.geometry.PointCloud, np.ndarray]:
     finder = lambda point: get_neighbour(point, kdtree, n)
     [idxs, sqrdists] = np.apply_along_axis(finder, axis=1, arr=iter_cloud.points).T
     idxs = idxs.astype(int)
-    neighbour_cloud = NumPyPointCloud(
-        points=np.take(search_cloud.points, indices=idxs, axis=0),
-        colors=np.take(search_cloud.colors, indices=idxs, axis=0),
-    )
-    return NumPyNeighbourCloud(
-        origin_cloud=iter_cloud,
-        cloud=neighbour_cloud,
-        sqrdists=sqrdists,
-    )
+    neigh_points = np.take(search_cloud.points, idxs, axis=0)
+    neigh_colors = np.take(search_cloud.colors, idxs, axis=0)
+    neigh_cloud = o3d.geometry.PointCloud()
+    neigh_cloud.points = o3d.utility.Vector3dVector(neigh_points)
+    neigh_cloud.colors = o3d.utility.Vector3dVector(neigh_colors)
+    return (neigh_cloud, sqrdists)
 
-class SimpleMetric:
-    LABEL: str = ""
-    value: typing.Any
+class CalculateResult:
+    pass
 
-    def __init__(self, value: typing.Any, label: str):
-        self.value = value
-        self.LABEL = label
+class CloudPair:
+    origin_cloud: o3d.geometry.PointCloud
+    reconst_cloud: o3d.geometry.PointCloud
+    __origin_tree: typing.Optional[o3d.geometry.KDTreeFlann] = None
+    __reconst_tree: typing.Optional[o3d.geometry.KDTreeFlann] = None
+    __origin_neigh_cloud: typing.Optional[o3d.geometry.KDTreeFlann] = None
+    __origin_neigh_dists : typing.Optional[np.array] = None
+    __reconst_neigh_cloud: typing.Optional[o3d.geometry.KDTreeFlann] = None
+    __reconst_neigh_dists : typing.Optional[np.array] = None
 
-def get_boundary_square_dist(
-    cloud: o3d.geometry.PointCloud,
-) -> typing.Tuple[np.float64, np.float64]:
-    inner_dists = cloud.compute_nearest_neighbor_distance()
-    return (
-        SimpleMetric(np.min(inner_dists), "MinGeoSqrtDist"),
-        SimpleMetric(np.max(inner_dists), "MaxGeoSqrtDist"),
-    )
+    def __init__(
+        self,
+        origin_cloud: o3d.geometry.PointCloud,
+        reconst_cloud: o3d.geometry.PointCloud,
+    ):
+        self.origin_cloud = origin_cloud
+        self.reconst_cloud = reconst_cloud
 
-def calculate(
-    origin_cloud: o3d.geometry.PointCloud,
-    processed_cloud: o3d.geometry.PointCloud,
-    ) -> typing.Dict[str, np.float64]:
-    np_origin_cloud = read_numpy_point_cloud(origin_cloud)
-    np_processed_cloud = read_numpy_point_cloud(processed_cloud)
+    @classmethod
+    def get_geo_mse(
+        cls,
+        sqrdists: np.ndarray,
+    ) -> np.float64:
+        return np.sum(sqrdists, axis=0) / sqrdists.shape[0]
 
-    # Iterate over O, search in P
-    ptree = o3d.geometry.KDTreeFlann(processed_cloud)
-    lneighbours = get_neighbour_cloud(
-        iter_cloud=np_origin_cloud,
-        search_cloud=np_processed_cloud,
-        kdtree=ptree,
-        n=0,
-    )
-    lmetrics = (GeoSSE(), ColorSSE())
-    for metric in lmetrics:
-        metric.add_points(origin_cloud=origin_cloud, neighbour_cloud=lneighbours)
+    @classmethod
+    def get_color_mse(
+        cls,
+        lcloud: o3d.geometry.PointCloud,
+        rcloud: o3d.geometry.PointCloud,
+    ):
+        return np.sum(np.subtract(lcloud.colors, rcloud.colors)**2, axis=0) / len(lcloud.colors)
 
-    # Iterate over P, search in O
+    @classmethod
+    def get_boundary_square_dist(
+        cls,
+        cloud: o3d.geometry.PointCloud,
+    ) -> typing.Tuple[np.float64, np.float64]:
+        inner_dists = cloud.compute_nearest_neighbor_distance()
+        return (np.min(inner_dists), np.max(inner_dists))
 
-    otree = o3d.geometry.KDTreeFlann(origin_cloud)
-    rneighbours = get_neighbour_cloud(
-        iter_cloud=processed_cloud,
-        search_cloud=origin_cloud,
-        kdtree=otree,
-        n=0,
-    )
-    rmetrics = (GeoSSE(), ColorSSE())
+    def calculate(self) -> CalculateResult:
+        self.__origin_tree = o3d.geometry.KDTreeFlann(self.origin_cloud)
+        self.__reconst_tree = o3d.geometry.KDTreeFlann(self.reconst_cloud)
+        self.__origin_neigh_cloud, self.__origin_neigh_dists = get_neighbour_cloud(
+            iter_cloud=self.origin_cloud,
+            search_cloud=self.reconst_cloud,
+            kdtree=self.__reconst_tree,
+            n=0,
+        )
+        self.__reconst_neigh_cloud, self.__reconst_neigh_dists = get_neighbour_cloud(
+            iter_cloud=self.reconst_cloud,
+            search_cloud=self.origin_cloud,
+            kdtree=self.__origin_tree,
+            n=0,
+        )
 
-    for metric in rmetrics:
-        metric.add_points(origin_cloud=processed_cloud, neighbour_cloud=rneighbours)
-
-    # Iterate over O, search in O
-    self_metrics = get_boundary_square_dist(origin_cloud)
-    return self_metrics + lmetrics + rmetrics
+        bounds = CloudPair.get_boundary_square_dist(self.origin_cloud)
+        return {
+            "MinGeoSqrtDist": bounds[0],
+            "MaxGeoSqrtDist": bounds[1],
+            "GeoMSE": CloudPair.get_geo_mse(self.__origin_neigh_dists),
+            "ColorMSE": CloudPair.get_color_mse(self.origin_cloud, self.__origin_neigh_cloud),
+        }
 
 def calculate_from_files(
     ocloud_file: str,
     pcloud_file: str,
     ) -> typing.Dict[str, np.float64]:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
-    return calculate(ocloud, pcloud)
+    cloud_pair = CloudPair(ocloud, pcloud)
+    return cloud_pair.calculate()
