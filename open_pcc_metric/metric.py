@@ -154,6 +154,35 @@ class GeoMSE(OrderedMetric):
         n = cloud_pair._origin_neigh_dists.shape[0]
         self.value = sse / n
 
+class GeoPSNR(SecondaryMetric, OrderedMetric):
+    label = "GeoPSNR"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        res = get_metrics_by_label(metrics, "MaxSqrtDistance")
+        if len(res) == 0:
+            return False
+        if len(res) > 1:
+            raise RuntimeError("Must be exactly one MaxSqrtDistance metric")
+        max_neigh_dist = res[0].value
+        res = get_metrics_by_label(metrics, "GeoMSE")
+        geo_mse = next(filter(lambda m: m.is_left == self.is_left, res), None)
+        if geo_mse is None:
+            raise RuntimeError("No corresponding GeoMSE found")
+        self.value = 10 * np.log10(max_neigh_dist**2 / geo_mse.value)
+        return True
+
+class ColorPSNR(SecondaryMetric, OrderedMetric):
+    label = "ColorPSNR"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        peak = 255
+        res = get_metrics_by_label(metrics, "ColorMSE")
+        geo_mse = next(filter(lambda m: m.is_left == self.is_left, res), None)
+        if geo_mse is None:
+            raise RuntimeError("No corresponding ColorMSE found")
+        self.value = 10 * np.log10(peak**2 / geo_mse.value)
+        return True
+
 class ColorMSE(OrderedMetric):
     label = "ColorMSE"
 
@@ -243,6 +272,20 @@ def calculate_from_files(
     secondary_metrics = [
         MinSqrtDistance(),
         MaxSqrtDistance(),
+        GeoPSNR(is_left=True),
+        GeoPSNR(is_left=False),
+        ColorPSNR(is_left=True),
+        ColorPSNR(is_left=False),
+        SymmetricMetric(
+            label="GeoPSNR(symmetric)",
+            is_proportional=True,
+            target_label="GeoPSNR",
+        ),
+        SymmetricMetric(
+            label="ColorPSNR(symmetric)",
+            is_proportional=True,
+            target_label="ColorPSNR",
+        ),
         SymmetricMetric(
             label="GeoMSE(symmetric)",
             is_proportional=False,
