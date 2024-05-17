@@ -235,6 +235,23 @@ class GeoHausdorffDistance(DirectionalMetric):
         else:
             self.value = np.max(cloud_pair._reconst_neigh_dists, axis=0)
 
+class GeoHausdorffDistancePSNR(SecondaryMetric, DirectionalMetric):
+    label = "GeoHausdorffDistancePSNR"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        res = get_metrics_by_label(metrics, "MaxSqrtDistance")
+        if len(res) == 0:
+            return False
+        if len(res) > 1:
+            raise RuntimeError("Must be exactly one MaxSqrtDistance metric")
+        peak = res[0].value
+        res = get_metrics_by_label(metrics, "GeoHausdorffDistance")
+        hausdorff = next(filter(lambda m: m.is_left == self.is_left, res), None)
+        if hausdorff is None:
+            raise RuntimeError("No corresponding GeoHausdorffDistance found")
+        self.value = 10 * np.log10(peak**2 / hausdorff.value)
+        return True
+
 class ColorHausdorffDistance(DirectionalMetric):
     label = "ColorHausdorffDistance"
 
@@ -247,6 +264,18 @@ class ColorHausdorffDistance(DirectionalMetric):
         rgb_scale = 255
         self.value = np.max((rgb_scale * diff)**2, axis=0)
 
+class ColorHausdorffDistancePSNR(SecondaryMetric, DirectionalMetric):
+    label = "ColorHausdorffDistancePSNR"
+
+    def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
+        peak = 255
+        res = get_metrics_by_label(metrics, "ColorHausdorffDistance")
+        hausdorff = next(filter(lambda m: m.is_left == self.is_left, res), None)
+        if hausdorff is None:
+            raise RuntimeError("No corresponding ColorHausdorffDistance found")
+        self.value = 10 * np.log10(peak**2 / hausdorff.value)
+        return True
+
 class SymmetricMetric(SecondaryMetric):
     is_proportional: bool
     target_label: str
@@ -258,8 +287,10 @@ class SymmetricMetric(SecondaryMetric):
 
     def calculate(self, metrics: typing.List[AbstractMetric]) -> bool:
         metrics = get_metrics_by_label(metrics, self.target_label)
-        if len(metrics) != 2:
-            raise RuntimeError("Must be exactly 2 ordered metrics")
+        if len(metrics) == 0:
+            return False
+        if len(metrics) > 2:
+            raise RuntimeError("Must be exactly 2 ordered metrics with label %s" % self.target_label)
         values = [m.value for m in metrics] # value is scalar or ndarray
         if self.is_proportional:
             self.value = min(values, key=np.linalg.norm)
@@ -297,7 +328,10 @@ class MetricCalculator:
 
         calculated_metrics = []
         not_calculated_metrics = self._secondary_metrics
+        new_not_calculated_metrics = []
         while not_calculated_metrics != []:
+            if len(not_calculated_metrics) == len(new_not_calculated_metrics):
+                raise RuntimeError("Could not calculate metrics: %s" % not_calculated_metrics)
             new_not_calculated_metrics = []
             for metric in not_calculated_metrics:
                 if metric.calculate(self._primary_metrics + calculated_metrics):
@@ -333,6 +367,10 @@ def calculate_from_files(
         GeoPSNR(is_left=False),
         ColorPSNR(is_left=True),
         ColorPSNR(is_left=False),
+        GeoHausdorffDistancePSNR(is_left=True),
+        GeoHausdorffDistancePSNR(is_left=False),
+        ColorHausdorffDistancePSNR(is_left=True),
+        ColorHausdorffDistancePSNR(is_left=False),
         SymmetricMetric(
             label="GeoPSNR(symmetric)",
             is_proportional=True,
@@ -362,6 +400,16 @@ def calculate_from_files(
             label="ColorHausdorffDistance(symmetric)",
             is_proportional=False,
             target_label="ColorHausdorffDistance",
+        ),
+        SymmetricMetric(
+            label="GeoHausdorffDistancePSNR(symmetric)",
+            is_proportional=True,
+            target_label="GeoHausdorffDistancePSNR",
+        ),
+        SymmetricMetric(
+            label="ColorHausdorffDistancePSNR(symmetric)",
+            is_proportional=True,
+            target_label="ColorHausdorffDistancePSNR",
         ),
     ]
     calculator = MetricCalculator(primary_metrics=primary_metrics, secondary_metrics=secondary_metrics)
