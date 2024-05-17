@@ -1,7 +1,6 @@
 import typing
 import abc
 import numpy as np
-from numpy.core.multiarray import array as array
 import open3d as o3d
 
 # Metrics to calculate:
