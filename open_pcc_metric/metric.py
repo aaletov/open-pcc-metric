@@ -227,7 +227,7 @@ class ColorMSE(DirectionalMetric):
         self.value = np.mean(diff**2, axis=0)
 
 class GeoHausdorffDistance(DirectionalMetric):
-    label = "GeoHausdorfDistance"
+    label = "GeoHausdorffDistance"
 
     def calculate(self, cloud_pair: CloudPair):
         if self.is_left:
@@ -352,7 +352,17 @@ def calculate_from_files(
             label="ColorMSE(symmetric)",
             is_proportional=False,
             target_label="ColorMSE",
-        )
+        ),
+        SymmetricMetric(
+            label="GeoHausdorffDistance(symmetric)",
+            is_proportional=False,
+            target_label="GeoHausdorffDistance",
+        ),
+        SymmetricMetric(
+            label="ColorHausdorffDistance(symmetric)",
+            is_proportional=False,
+            target_label="ColorHausdorffDistance",
+        ),
     ]
     calculator = MetricCalculator(primary_metrics=primary_metrics, secondary_metrics=secondary_metrics)
 
