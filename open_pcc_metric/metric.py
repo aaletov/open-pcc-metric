@@ -475,6 +475,21 @@ class SymmetricMetric(SimpleMetric):
     def __repr__(self) -> str:
         return "{label}:{metrics}".format(label=self.label, metrics=self.metrics)
 
+class CalculateOptions:
+    color: typing.Optional[str]
+    hausdorff: bool
+    point_to_plane: bool
+
+    def __init__(
+        self,
+        color: typing.Optional[str] = None,
+        hausdorff: bool = False,
+        point_to_plane: bool = False,
+    ):
+        self.color = color
+        self.hausdorff = hausdorff
+        self.point_to_plane = point_to_plane
+
 class CalculateResult:
     _metrics: typing.List[AbstractMetric]
 
@@ -485,150 +500,163 @@ class CalculateResult:
         return "\n".join([str(metric) for metric in self._metrics])
 
 class MetricCalculator:
-    _metrics: typing.List[AbstractMetric]
-
-    def __init__(
+    def calculate(
         self,
-        metrics: typing.List[AbstractMetric]
-    ):
-        self._metrics = metrics
+        cloud_pair: CloudPair,
+        options: CalculateOptions,
+    ) -> CalculateResult:
+        metrics = [
+            MinSqrtDistance(),
+            MaxSqrtDistance(),
+            GeoMSE(is_left=True, point_to_plane=False),
+            GeoMSE(is_left=False, point_to_plane=False),
+            SymmetricMetric(
+                metrics=(
+                    GeoMSE(is_left=True, point_to_plane=False),
+                    GeoMSE(is_left=False, point_to_plane=False),
+                ),
+                is_proportional=False,
+            ),
+            GeoPSNR(is_left=True, point_to_plane=False),
+            GeoPSNR(is_left=False, point_to_plane=False),
+            SymmetricMetric(
+                metrics=(
+                    GeoPSNR(is_left=True, point_to_plane=False),
+                    GeoPSNR(is_left=False, point_to_plane=False),
+                ),
+                is_proportional=True,
+            ),
+        ]
 
-    def calculate(self, cloud_pair: CloudPair) -> CalculateResult:
-        for metric in self._metrics:
+        if options.color == "rgb":
+            metrics += [
+                ColorMSE(is_left=True),
+                ColorMSE(is_left=False),
+                SymmetricMetric(
+                    metrics=(
+                        ColorMSE(is_left=True),
+                        ColorMSE(is_left=False),
+                    ),
+                    is_proportional=False,
+                ),
+                ColorPSNR(is_left=True),
+                ColorPSNR(is_left=False),
+                SymmetricMetric(
+                    metrics=(
+                        ColorPSNR(is_left=True),
+                        ColorPSNR(is_left=False),
+                    ),
+                    is_proportional=True,
+                ),
+            ]
+
+        if options.color == "ycc":
+            metrics += [
+                ColorMSE(is_left=True),
+                ColorMSE(is_left=False),
+                SymmetricMetric(
+                    metrics=(
+                        ColorMSE(is_left=True),
+                        ColorMSE(is_left=False),
+                    ),
+                    is_proportional=False,
+                ),
+                ColorPSNR(is_left=True),
+                ColorPSNR(is_left=False),
+                SymmetricMetric(
+                    metrics=(
+                        ColorPSNR(is_left=True),
+                        ColorPSNR(is_left=False),
+                    ),
+                    is_proportional=True,
+                ),
+            ]
+
+        if options.point_to_plane:
+            metrics += [
+                GeoMSE(is_left=True, point_to_plane=True),
+                GeoMSE(is_left=False, point_to_plane=True),
+                SymmetricMetric(
+                    metrics=(
+                        GeoMSE(is_left=True, point_to_plane=True),
+                        GeoMSE(is_left=False, point_to_plane=True),
+                    ),
+                    is_proportional=False,
+                ),
+                GeoPSNR(is_left=True, point_to_plane=True),
+                GeoPSNR(is_left=False, point_to_plane=True),
+                SymmetricMetric(
+                    metrics=(
+                        GeoPSNR(is_left=True, point_to_plane=True),
+                        GeoPSNR(is_left=False, point_to_plane=True),
+                    ),
+                    is_proportional=True,
+                ),
+            ]
+
+        if options.hausdorff:
+            metrics += [
+                GeoHausdorffDistance(is_left=True, point_to_plane=False),
+                GeoHausdorffDistance(is_left=False, point_to_plane=False),
+                SymmetricMetric(
+                    metrics=(
+                        GeoHausdorffDistance(is_left=True, point_to_plane=False),
+                        GeoHausdorffDistance(is_left=False, point_to_plane=False),
+                    ),
+                    is_proportional=False,
+                ),
+                GeoHausdorffDistancePSNR(is_left=True, point_to_plane=False),
+                GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
+                SymmetricMetric(
+                    metrics=(
+                        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=False),
+                        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
+                    ),
+                    is_proportional=True,
+                ),
+            ]
+
+        if options.hausdorff and options.point_to_plane:
+            metrics += [
+                GeoHausdorffDistance(is_left=True, point_to_plane=True),
+                GeoHausdorffDistance(is_left=False, point_to_plane=True),
+                GeoHausdorffDistancePSNR(is_left=True, point_to_plane=True),
+                GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
+                SymmetricMetric(
+                    metrics=(
+                        GeoHausdorffDistance(is_left=True, point_to_plane=True),
+                        GeoHausdorffDistance(is_left=False, point_to_plane=True),
+                    ),
+                    is_proportional=False,
+                ),
+                SymmetricMetric(
+                    metrics=(
+                        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=True),
+                        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
+                    ),
+                    is_proportional=True,
+                ),
+            ]
+
+        print("{num} metrics to calculate".format(num=len(metrics)))
+
+        for metric in metrics:
             if not metric.is_calculated:
                 metric.calculate(cloud_pair)
 
-        calculated_metrics = list(filter(lambda m: m.is_calculated, self._metrics))
+        calculated_metrics = list(filter(lambda m: m.is_calculated, metrics))
+
+        if len(calculated_metrics) != len(metrics):
+            raise RuntimeWarning("Not all metrics were calculated")
+
         return CalculateResult(calculated_metrics)
 
 def calculate_from_files(
     ocloud_file: str,
     pcloud_file: str,
+    calculate_options: CalculateOptions,
     ) -> typing.Dict[str, np.float64]:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
     cloud_pair = CloudPair(ocloud, pcloud)
-    metrics = [
-        BoundarySqrtDistances(),
-        ErrorVector(is_left=True, point_to_plane=False),
-        ErrorVector(is_left=False, point_to_plane=False),
-        ErrorVector(is_left=True, point_to_plane=True),
-        ErrorVector(is_left=False, point_to_plane=True),
-        ColorMSE(is_left=True),
-        ColorMSE(is_left=False),
-        ColorHausdorffDistance(is_left=True),
-        ColorHausdorffDistance(is_left=False),
-        MinSqrtDistance(),
-        MaxSqrtDistance(),
-        EuclideanDistance(is_left=True, point_to_plane=False),
-        EuclideanDistance(is_left=False, point_to_plane=False),
-        EuclideanDistance(is_left=True, point_to_plane=True),
-        EuclideanDistance(is_left=False, point_to_plane=True),
-        GeoMSE(is_left=True, point_to_plane=False),
-        GeoMSE(is_left=False, point_to_plane=False),
-        GeoMSE(is_left=True, point_to_plane=True),
-        GeoMSE(is_left=False, point_to_plane=True),
-        GeoHausdorffDistance(is_left=True, point_to_plane=False),
-        GeoHausdorffDistance(is_left=False, point_to_plane=False),
-        GeoHausdorffDistance(is_left=True, point_to_plane=True),
-        GeoHausdorffDistance(is_left=False, point_to_plane=True),
-        GeoPSNR(is_left=True, point_to_plane=False),
-        GeoPSNR(is_left=False, point_to_plane=False),
-        GeoPSNR(is_left=True, point_to_plane=True),
-        GeoPSNR(is_left=False, point_to_plane=True),
-        ColorPSNR(is_left=True),
-        ColorPSNR(is_left=False),
-        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=False),
-        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
-        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=True),
-        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
-        ColorHausdorffDistancePSNR(is_left=True),
-        ColorHausdorffDistancePSNR(is_left=False),
-        SymmetricMetric(
-            metrics=(
-                GeoMSE(is_left=True, point_to_plane=False),
-                GeoMSE(is_left=False, point_to_plane=False),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoMSE(is_left=True, point_to_plane=True),
-                GeoMSE(is_left=False, point_to_plane=True),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoPSNR(is_left=True, point_to_plane=False),
-                GeoPSNR(is_left=False, point_to_plane=False),
-            ),
-            is_proportional=True,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoPSNR(is_left=True, point_to_plane=True),
-                GeoPSNR(is_left=False, point_to_plane=True),
-            ),
-            is_proportional=True,
-        ),
-        SymmetricMetric(
-            metrics=(
-                ColorMSE(is_left=True),
-                ColorMSE(is_left=False),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                ColorPSNR(is_left=True),
-                ColorPSNR(is_left=False),
-            ),
-            is_proportional=True,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoHausdorffDistance(is_left=True, point_to_plane=False),
-                GeoHausdorffDistance(is_left=False, point_to_plane=False),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoHausdorffDistance(is_left=True, point_to_plane=True),
-                GeoHausdorffDistance(is_left=False, point_to_plane=True),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                ColorHausdorffDistance(is_left=True),
-                ColorHausdorffDistance(is_left=False),
-            ),
-            is_proportional=False,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoHausdorffDistancePSNR(is_left=True, point_to_plane=False),
-                GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
-            ),
-            is_proportional=True,
-        ),
-        SymmetricMetric(
-            metrics=(
-                GeoHausdorffDistancePSNR(is_left=True, point_to_plane=True),
-                GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
-            ),
-            is_proportional=True,
-        ),
-        SymmetricMetric(
-            metrics=(
-                ColorHausdorffDistancePSNR(is_left=True),
-                ColorHausdorffDistancePSNR(is_left=False),
-            ),
-            is_proportional=True,
-        ),
-    ]
-    print("{num} metrics to calculate".format(num=len(metrics)))
-    calculator = MetricCalculator(metrics=metrics)
-
-    return calculator.calculate(cloud_pair)
+    calculator = MetricCalculator()
+    return calculator.calculate(cloud_pair, calculate_options)
