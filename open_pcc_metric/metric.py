@@ -471,6 +471,14 @@ class SymmetricMetric(SimpleMetric):
         self.metrics = metrics
         self.is_proportional = is_proportional
 
+    def _key(self) -> str:
+        if hasattr(self.metrics[0], "point_to_plane"):
+            return "{label}({p2plane})(symmetric)".format(
+                label=metrics[0].label,
+                p2plane="p2plane" if self.metrics[0].point_to_plane else "p2point",
+            )
+        return self.label
+
     def calculate(
         self,
         cloud_pair: CloudPair,
