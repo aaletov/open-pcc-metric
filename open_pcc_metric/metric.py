@@ -27,8 +27,15 @@ class CloudPair:
         self,
         origin_cloud: o3d.geometry.PointCloud,
         reconst_cloud: o3d.geometry.PointCloud,
+        color_scheme: typing.Optional[str] = None,
     ):
         self.clouds = (origin_cloud, reconst_cloud)
+
+        if color_scheme == "ycc":
+            print("Converting clouds to ycc")
+            CloudPair._convert_cloud_to_ycc(self.clouds[0])
+            CloudPair._convert_cloud_to_ycc(self.clouds[1])
+
         if not self.clouds[0].has_normals():
             self.clouds[0].estimate_normals()
         if not self.clouds[1].has_normals():
@@ -51,17 +58,28 @@ class CloudPair:
         self._neigh_dists = (origin_neigh_dists, reconst_neigh_dists)
 
     @staticmethod
-    def scale_rgb(cloud: o3d.geometry.PointCloud):
-        scaled_colors = np.apply_along_axis(
-            func1d=lambda c: 255 * c,
+    def _convert_cloud_to_ycc(cloud: o3d.geometry.PointCloud):
+        """Helper function to convert RGB to BT.709
+        """
+        transform = np.array([
+            [0.2126, 0.7152, 0.0722],
+            [-0.1146, -0.3854, 0.5],
+            [0.5, -0.4542, -0.0458],
+        ])
+        def converter(c: np.ndarray) -> np.ndarray:
+            ycc = np.matmul(transform, c)
+            return ycc
+
+        converted_colors = np.apply_along_axis(
+            func1d=converter,
             axis=1,
             arr=cloud.colors
         )
-        cloud.colors = o3d.utility.Vector3dVector(scaled_colors)
+        cloud.colors = o3d.utility.Vector3dVector(converted_colors)
 
     @staticmethod
-    def convert_cloud_to_yuv(cloud: o3d.geometry.PointCloud):
-        """Helper function to convert RGB to YUV (BT.709 or YCoCg-R)
+    def _convert_cloud_to_yuv(cloud: o3d.geometry.PointCloud):
+        """Helper function to convert RGB to YCoCg-R
         """
         # only rgb supported
         transform = np.array([
@@ -528,29 +546,7 @@ class MetricCalculator:
             ),
         ]
 
-        if options.color == "rgb":
-            metrics += [
-                ColorMSE(is_left=True),
-                ColorMSE(is_left=False),
-                SymmetricMetric(
-                    metrics=(
-                        ColorMSE(is_left=True),
-                        ColorMSE(is_left=False),
-                    ),
-                    is_proportional=False,
-                ),
-                ColorPSNR(is_left=True),
-                ColorPSNR(is_left=False),
-                SymmetricMetric(
-                    metrics=(
-                        ColorPSNR(is_left=True),
-                        ColorPSNR(is_left=False),
-                    ),
-                    is_proportional=True,
-                ),
-            ]
-
-        if options.color == "ycc":
+        if options.color is not None:
             metrics += [
                 ColorMSE(is_left=True),
                 ColorMSE(is_left=False),
@@ -657,6 +653,6 @@ def calculate_from_files(
     calculate_options: CalculateOptions,
     ) -> typing.Dict[str, np.float64]:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
-    cloud_pair = CloudPair(ocloud, pcloud)
+    cloud_pair = CloudPair(ocloud, pcloud, calculate_options.color)
     calculator = MetricCalculator()
     return calculator.calculate(cloud_pair, calculate_options)
