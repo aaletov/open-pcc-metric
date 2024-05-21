@@ -140,8 +140,11 @@ class AbstractMetric(abc.ABC):
                 return instance
         return None
 
+    def _key(self) -> str:
+        return "{label}"
+
     def __str__(self) -> str:
-        return "{label}: {value}".format(label=self.label, value=str(self.value))
+        return "{key}: {value}".format(key=self._key(), value=str(self.value))
 
     @abc.abstractmethod
     def _match(self, **kwargs) -> bool:
@@ -184,13 +187,9 @@ class DirectionalMetric(AbstractMetric):
             (self.is_left == kwargs["is_left"])
         )
 
-    def __str__(self) -> str:
+    def _key(self) -> str:
         order = "left" if self.is_left else "right"
-        return "{label}({order}): {value}".format(
-            label=self.label,
-            order=order,
-            value=self.value,
-        )
+        return "{label}({order})".format(label=self.label, order=order)
 
 class PointToPlaneable(DirectionalMetric):
     point_to_plane: bool
@@ -219,14 +218,13 @@ class PointToPlaneable(DirectionalMetric):
             (self.point_to_plane == kwargs["point_to_plane"])
         )
 
-    def __str__(self) -> str:
+    def _key(self) -> str:
         order = "left" if self.is_left else "right"
         proj_type = "p2plane" if self.point_to_plane else "p2point"
-        return "{label}({proj_type})({order}): {value}".format(
+        return "{label}({proj_type})({order})".format(
             label=self.label,
             proj_type=proj_type,
             order=order,
-            value=self.value,
         )
 
 class ErrorVector(PointToPlaneable):
@@ -487,9 +485,6 @@ class SymmetricMetric(SimpleMetric):
             self.value = max(values, key=np.linalg.norm)
         self.is_calculated = True
 
-    def __str__(self) -> str:
-        return "{label}: {value}".format(label=self.label, value=self.value)
-
     def __repr__(self) -> str:
         return "{label}:{metrics}".format(label=self.label, metrics=self.metrics)
 
@@ -513,6 +508,12 @@ class CalculateResult:
 
     def __init__(self, metrics: typing.List[AbstractMetric]):
         self._metrics = metrics
+
+    def as_dict(self) -> typing.Dict[str, typing.Any]:
+        d = dict()
+        for metric in self._metrics:
+            d[metric._key()] = metric.value
+        return d
 
     def __str__(self) -> str:
         return "\n".join([str(metric) for metric in self._metrics])
