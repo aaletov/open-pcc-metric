@@ -31,7 +31,11 @@ class CloudPair:
     ):
         self.clouds = (origin_cloud, reconst_cloud)
 
-        if color_scheme == "ycc":
+        if (
+            self.clouds[0].has_colors() and
+            self.clouds[1].has_colors() and
+            color_scheme == "ycc"
+        ):
             print("Converting clouds to ycc")
             CloudPair._convert_cloud_to_ycc(self.clouds[0])
             CloudPair._convert_cloud_to_ycc(self.clouds[1])
@@ -121,10 +125,13 @@ class CloudPair:
         [idxs, sqrdists] = np.apply_along_axis(finder, axis=1, arr=iter_cloud.points).T
         idxs = idxs.astype(int)
         neigh_points = np.take(search_cloud.points, idxs, axis=0)
-        neigh_colors = np.take(search_cloud.colors, idxs, axis=0)
         neigh_cloud = o3d.geometry.PointCloud()
         neigh_cloud.points = o3d.utility.Vector3dVector(neigh_points)
-        neigh_cloud.colors = o3d.utility.Vector3dVector(neigh_colors)
+
+        if search_cloud.has_colors():
+            neigh_colors = np.take(search_cloud.colors, idxs, axis=0)
+            neigh_cloud.colors = o3d.utility.Vector3dVector(neigh_colors)
+
         return (neigh_cloud, sqrdists)
 
 class AbstractMetric(abc.ABC):
@@ -548,7 +555,11 @@ class MetricCalculator:
             ),
         ]
 
-        if options.color is not None:
+        if (
+            cloud_pair.clouds[0].has_colors() and
+            cloud_pair.clouds[1].has_colors() and
+            (options.color is not None)
+        ):
             metrics += [
                 ColorMSE(is_left=True),
                 ColorMSE(is_left=False),
