@@ -331,15 +331,8 @@ class GeoPSNR(PointToPlaneable):
         self,
         cloud_pair: CloudPair,
     ) -> None:
-        peak = None
-        if not self.point_to_plane:
-            max_sqrt = MaxSqrtDistance()
-            if not max_sqrt.is_calculated:
-                max_sqrt.calculate(cloud_pair)
-            peak = max_sqrt.value
-        else:
-            bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()
-            peak = np.max(bounding_box.extent)
+        bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()
+        peak = np.max(bounding_box.extent)
 
         geo_mse = GeoMSE(
             is_left=self.is_left,
