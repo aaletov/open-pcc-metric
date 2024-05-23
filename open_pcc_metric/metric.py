@@ -111,6 +111,7 @@ class CloudPair:
         kdtree: o3d.geometry.KDTreeFlann,
         n: int,
     ) -> np.ndarray:
+        rpoint = point.reshape((3, 1))
         [k, idx, dists] = kdtree.search_knn_vector_3d(point, n + 1)
         return np.array((idx[-1], dists[-1]))
 
