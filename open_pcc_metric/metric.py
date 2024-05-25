@@ -1,19 +1,19 @@
 import typing
 import abc
+import sys
+import logging
 import numpy as np
 import pandas as pd
 import open3d as o3d
 
-# Metrics to calculate:
-#   - Geometric PSNR
-#       - Geometric pPSNR (max over **original** range)
-#       - Geometric MSE (cumulative over both ranges)
-#   - RGB PSNR
-#       - RGB MSE (cumulative over both ranges)
-#
-# Both cumulative and max metrics are kind of fold-accumulate
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
-# Maybe work with chunks?
+handler = logging.StreamHandler(sys.stderr)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 PointCloud = o3d.geometry.PointCloud
 KDFlann = o3d.geometry.KDTreeFlann
@@ -38,7 +38,7 @@ class CloudPair:
             self.clouds[1].has_colors() and
             color_scheme == "ycc"
         ):
-            print("Converting clouds to ycc")
+            logger.info("Converting clouds to ycc")
             CloudPair._convert_cloud_to_ycc(self.clouds[0])
             CloudPair._convert_cloud_to_ycc(self.clouds[1])
 
@@ -271,6 +271,7 @@ class CloudPair:
 
     def calculate(self, options: 'CalculateOptions') -> 'CalculateResult':
         metrics_list = self._transform_options(options)
+        logger.info("{num} metrics to calculate".format(num=len(metrics_list)))
 
         calculated_metrics_list = []
         for metric in metrics_list:
@@ -570,9 +571,6 @@ class SymmetricMetric(AbstractMetric):
             self.value = max(values, key=np.linalg.norm)
         self.is_calculated = True
 
-    # def __repr__(self) -> str:
-    #     return "{label}:{metrics}".format(label=self.label, metrics=self.metrics)
-
 class CalculateOptions:
     color: typing.Optional[str]
     hausdorff: bool
@@ -629,27 +627,6 @@ class CalculateResult:
 
     def __str__(self) -> str:
         return str(self.as_df())
-
-# class MetricCalculator:
-#     def calculate(
-#         self,
-#         cloud_pair: CloudPair,
-#         options: CalculateOptions,
-#     ) -> CalculateResult:
-
-
-#         print("{num} metrics to calculate".format(num=len(metrics)))
-
-#         for metric in metrics:
-#             if not metric.is_calculated:
-#                 metric.calculate(cloud_pair)
-
-#         calculated_metrics = list(filter(lambda m: m.is_calculated, metrics))
-
-#         if len(calculated_metrics) != len(metrics):
-#             raise RuntimeWarning("Not all metrics were calculated")
-
-#         return CalculateResult(calculated_metrics)
 
 def calculate_from_files(
     ocloud_file: str,
