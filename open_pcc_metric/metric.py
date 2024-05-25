@@ -29,18 +29,8 @@ class CloudPair:
         self,
         origin_cloud: o3d.geometry.PointCloud,
         reconst_cloud: o3d.geometry.PointCloud,
-        color_scheme: typing.Optional[str] = None,
     ):
         self.clouds = (origin_cloud, reconst_cloud)
-
-        if (
-            self.clouds[0].has_colors() and
-            self.clouds[1].has_colors() and
-            color_scheme == "ycc"
-        ):
-            logger.info("Converting clouds to ycc")
-            CloudPair._convert_cloud_to_ycc(self.clouds[0])
-            CloudPair._convert_cloud_to_ycc(self.clouds[1])
 
         if not self.clouds[0].has_normals():
             self.clouds[0].estimate_normals()
@@ -62,50 +52,6 @@ class CloudPair:
         )
         self._neigh_clouds = (origin_neigh_cloud, reconst_neigh_cloud)
         self._neigh_dists = (origin_neigh_dists, reconst_neigh_dists)
-
-    @staticmethod
-    def _convert_cloud_to_ycc(cloud: o3d.geometry.PointCloud):
-        """Helper function to convert RGB to BT.709
-        """
-        transform = np.array([
-            [0.2126, 0.7152, 0.0722],
-            [-0.1146, -0.3854, 0.5],
-            [0.5, -0.4542, -0.0458],
-        ])
-        def converter(c: np.ndarray) -> np.ndarray:
-            ycc = np.matmul(transform, c)
-            return ycc
-
-        converted_colors = np.apply_along_axis(
-            func1d=converter,
-            axis=1,
-            arr=cloud.colors
-        )
-        cloud.colors = o3d.utility.Vector3dVector(converted_colors)
-
-    @staticmethod
-    def _convert_cloud_to_yuv(cloud: o3d.geometry.PointCloud):
-        """Helper function to convert RGB to YCoCg-R
-        """
-        # only rgb supported
-        transform = np.array([
-            [0.25, 0.5, 0.25],
-            [1, 0, -1],
-            [-0.5, 1, -0.5]
-        ])
-        def converter(c: np.ndarray) -> np.ndarray:
-            yuv_c = np.matmul(transform, c)
-            # offset 2^8 Co and Cg
-            yuv_c[1] += 256
-            yuv_c[2] += 256
-            return yuv_c
-
-        converted_colors = np.apply_along_axis(
-            func1d=converter,
-            axis=1,
-            arr=cloud.colors
-        )
-        cloud.colors = o3d.utility.Vector3dVector(converted_colors)
 
     @staticmethod
     def get_neighbour(
@@ -167,21 +113,21 @@ class CloudPair:
             (options.color is not None)
         ):
             metrics += [
-                ColorMSE(is_left=True),
-                ColorMSE(is_left=False),
+                ColorMSE(is_left=True, color_scheme=options.color),
+                ColorMSE(is_left=False, color_scheme=options.color),
                 SymmetricMetric(
                     metrics=(
-                        ColorMSE(is_left=True),
-                        ColorMSE(is_left=False),
+                        ColorMSE(is_left=True, color_scheme=options.color),
+                        ColorMSE(is_left=False, color_scheme=options.color),
                     ),
                     is_proportional=False,
                 ),
-                ColorPSNR(is_left=True),
-                ColorPSNR(is_left=False),
+                ColorPSNR(is_left=True, color_scheme=options.color),
+                ColorPSNR(is_left=False, color_scheme=options.color),
                 SymmetricMetric(
                     metrics=(
-                        ColorPSNR(is_left=True),
-                        ColorPSNR(is_left=False),
+                        ColorPSNR(is_left=True, color_scheme=options.color),
+                        ColorPSNR(is_left=False, color_scheme=options.color),
                     ),
                     is_proportional=True,
                 ),
@@ -440,30 +386,95 @@ class GeoPSNR(PointToPlaneable):
         self.value = 10 * np.log10(peak**2 / geo_mse.value)
         self.is_calculated = True
 
-class ColorMSE(DirectionalMetric):
+class ColorMetric(DirectionalMetric):
+    color_scheme: str
+
+    def __init__(self, is_left: bool, color_scheme: str):
+        super().__init__(is_left)
+        self.color_scheme = color_scheme
+
+    def _key(self) -> typing.Tuple:
+        return super()._key() + (self.color_scheme,)
+
+def transform_colors(
+    colors: np.ndarray,
+    source_scheme: str,
+    target_scheme: str,
+) -> np.ndarray:
+    if source_scheme == target_scheme:
+        return colors
+
+    transform = None
+    if (source_scheme == "rgb") and (target_scheme == "ycc"):
+        transform = np.array([
+            [0.2126, 0.7152, 0.0722],
+            [-0.1146, -0.3854, 0.5],
+            [0.5, -0.4542, -0.0458],
+        ])
+    if (source_scheme == "rgb") and (target_scheme == "yuv"):
+        transform = np.array([
+            [0.25, 0.5, 0.25],
+            [1, 0, -1],
+            [-0.5, 1, -0.5]
+        ])
+
+    def converter(c: np.ndarray) -> np.ndarray:
+        return np.matmul(transform , c)
+
+    return np.apply_along_axis(
+        func1d=converter,
+        axis=1,
+        arr=colors,
+    )
+
+def get_color_peak(color_scheme: str) -> np.float64:
+    colors_to_values = {
+        "rgb": 255.0,
+        "ycc": 1.0,
+        "yuv": 1.0,
+    }
+    return colors_to_values[color_scheme]
+
+
+class ColorMSE(ColorMetric):
     def calculate(
         self,
         cloud_pair: CloudPair,
         **kwargs,
     ) -> None:
         cloud_idx = 0 if self.is_left else 1
+        orig_colors = np.copy(cloud_pair.clouds[cloud_idx].colors)
+        neigh_colors = np.copy(cloud_pair._neigh_clouds[cloud_idx].colors)
+
+        orig_colors = transform_colors(
+            colors=orig_colors,
+            source_scheme="rgb",
+            target_scheme=self.color_scheme,
+        )
+
+        neigh_colors = transform_colors(
+            colors=neigh_colors,
+            source_scheme="rgb",
+            target_scheme=self.color_scheme,
+        )
+
         diff = np.subtract(
-            cloud_pair.clouds[cloud_idx].colors,
-            cloud_pair._neigh_clouds[cloud_idx].colors,
+            orig_colors,
+            neigh_colors,
         )
         self.value = np.mean(diff**2, axis=0)
         self.is_calculated = True
 
-class ColorPSNR(DirectionalMetric):
+class ColorPSNR(ColorMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
-        return {"color_mse": ColorMSE(is_left=self.is_left)}
+        return {"color_mse": ColorMSE(is_left=self.is_left, color_scheme=self.color_scheme)}
 
     def calculate(
         self,
         cloud_pair: CloudPair,
         color_mse: ColorMSE,
     ) -> None:
-        peak = 255
+        peak = get_color_peak(self.color_scheme)
         self.value = 10 * np.log10(peak**2 / color_mse.value)
         self.is_calculated = True
 
@@ -503,30 +514,55 @@ class GeoHausdorffDistancePSNR(PointToPlaneable):
         self.value = 10 * np.log10(max_sqrt.value**2 / hausdorff_distance.value)
         self.is_calculated = True
 
-class ColorHausdorffDistance(DirectionalMetric):
+class ColorHausdorffDistance(ColorMetric):
     def calculate(
         self,
         cloud_pair: CloudPair,
     ) -> None:
         cloud_idx = 0 if self.is_left else 1
-        diff = np.subtract(
-            cloud_pair.clouds[cloud_idx].colors,
-            cloud_pair._neigh_clouds[cloud_idx].colors
+        orig_colors = np.copy(cloud_pair.clouds[cloud_idx].colors)
+        neigh_colors = np.copy(cloud_pair._neigh_clouds[cloud_idx].colors)
+
+        orig_colors = transform_colors(
+            colors=orig_colors,
+            source_scheme="rgb",
+            target_scheme=self.color_scheme,
         )
-        rgb_scale = 255
-        self.value = np.max((rgb_scale * diff)**2, axis=0)
+
+        neigh_colors = transform_colors(
+            colors=neigh_colors,
+            source_scheme="rgb",
+            target_scheme=self.color_scheme,
+        )
+
+        diff = np.subtract(
+            orig_colors,
+            neigh_colors,
+        )
+
+        # ???
+        if self.color_scheme == "rgb":
+            rgb_scale = 255
+            diff = rgb_scale * diff
+
+        self.value = np.max(diff**2, axis=0)
         self.is_calculated = True
 
-class ColorHausdorffDistancePSNR(DirectionalMetric):
+class ColorHausdorffDistancePSNR(ColorMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
-        return {"hausdorff_distance": ColorHausdorffDistance(is_left=self.is_left)}
+        return {
+            "hausdorff_distance": ColorHausdorffDistance(
+                is_left=self.is_left,
+                color_scheme=self.color_scheme,
+            ),
+        }
 
     def calculate(
         self,
         cloud_pair: CloudPair,
         hausdorff_distance: ColorHausdorffDistance,
     ) -> None:
-        peak = 255
+        peak = get_color_peak(self.color_scheme)
         self.value = 10 * np.log10(peak**2 / hausdorff_distance.value)
         self.is_calculated = True
 
@@ -634,5 +670,5 @@ def calculate_from_files(
     calculate_options: CalculateOptions,
     ) -> pd.DataFrame:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
-    cloud_pair = CloudPair(ocloud, pcloud, calculate_options.color)
+    cloud_pair = CloudPair(ocloud, pcloud)
     return cloud_pair.calculate(calculate_options).as_df()
