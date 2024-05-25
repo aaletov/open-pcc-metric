@@ -60,7 +60,7 @@ class CloudPair:
         n: int,
     ) -> np.ndarray:
         rpoint = point.reshape((3, 1))
-        [k, idx, dists] = kdtree.search_knn_vector_3d(rpoint, n + 1)
+        [_, idx, dists] = kdtree.search_knn_vector_3d(rpoint, n + 1)
         return np.array((idx[-1], dists[-1]))
 
     @staticmethod
@@ -217,7 +217,7 @@ class CloudPair:
 
     def calculate(self, options: 'CalculateOptions') -> 'CalculateResult':
         metrics_list = self._transform_options(options)
-        logger.info("{num} metrics to calculate".format(num=len(metrics_list)))
+        logger.info("%s metrics to calculate", len(metrics_list))
 
         calculated_metrics_list = []
         for metric in metrics_list:

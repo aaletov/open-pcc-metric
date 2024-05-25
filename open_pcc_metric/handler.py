@@ -18,7 +18,12 @@ import click
         "then hausdorff point-to-plane would be reported too",
         )),
 )
-@click.option("--point-to-plane", required=False, is_flag=True, help="Report point-to-plane distance as well.")
+@click.option(
+    "--point-to-plane",
+    required=False,
+    is_flag=True,
+    help="Report point-to-plane distance as well.",
+)
 def cli(ocloud: str, pcloud: str, color: str, hausdorff: bool, point_to_plane: bool) -> None:
     from . import metric
 
