@@ -34,4 +34,4 @@ def cli(ocloud: str, pcloud: str, color: str, hausdorff: bool, point_to_plane: b
         calculate_options=options,
     )
 
-    print(result)
+    print(result.to_string())

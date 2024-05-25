@@ -23,6 +23,7 @@ class CloudPair:
     _trees: typing.Tuple[typing.Optional[KDFlann], typing.Optional[KDFlann]]
     _neigh_clouds: typing.Tuple[PointCloud, PointCloud]
     _neigh_dists: typing.Tuple[typing.Optional[np.ndarray], typing.Optional[np.ndarray]]
+    _calculated_metrics: typing.Dict[typing.Tuple, 'AbstractMetric'] = {}
 
     def __init__(
         self,
@@ -113,7 +114,7 @@ class CloudPair:
         n: int,
     ) -> np.ndarray:
         rpoint = point.reshape((3, 1))
-        [k, idx, dists] = kdtree.search_knn_vector_3d(point, n + 1)
+        [k, idx, dists] = kdtree.search_knn_vector_3d(rpoint, n + 1)
         return np.array((idx[-1], dists[-1]))
 
     @staticmethod
@@ -136,428 +137,7 @@ class CloudPair:
 
         return (neigh_cloud, sqrdists)
 
-class AbstractMetric(abc.ABC):
-    label: str
-    value: typing.Any
-    is_calculated: bool = False
-    _instances: typing.List['AbstractMetric'] = []
-
-    @classmethod
-    def _get_existing(cls, **kwargs) -> typing.Optional['AbstractMetric']:
-        for instance in cls._instances:
-            if instance._match(**kwargs):
-                return instance
-        return None
-
-    def _key(self) -> str:
-        return self.label
-
-    def __str__(self) -> str:
-        return "{key}: {value}".format(key=self._key(), value=str(self.value))
-
-    @abc.abstractmethod
-    def _match(self, **kwargs) -> bool:
-        raise NotImplementedError("raise is not implemented")
-
-    @abc.abstractmethod
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        raise NotImplementedError("calculate is not implemented")
-
-class SimpleMetric(AbstractMetric):
-    def _match(self, **kwargs) -> bool:
-        return ("label" in kwargs) and (self.label == kwargs["label"])
-
-def get_metrics_by_label(
-    metrics: typing.List[AbstractMetric],
-    label: str,
-) -> typing.List[AbstractMetric]:
-    return list(filter(lambda m: m.label == label, metrics))
-
-class DirectionalMetric(AbstractMetric):
-    is_left: bool
-
-    def __new__(cls, is_left: bool) -> 'DirectionalMetric':
-        instance = cls._get_existing(label=cls.label, is_left=is_left)
-        if instance is None:
-            new_instance = super(DirectionalMetric, cls).__new__(cls)
-            new_instance.is_left = is_left
-            cls._instances.append(new_instance)
-            return new_instance
-        return instance
-
-    def _match(self, **kwargs) -> bool:
-        return (
-            ("label" in kwargs) and
-            (self.label == kwargs["label"]) and
-            ("is_left" in kwargs) and
-            (self.is_left == kwargs["is_left"])
-        )
-
-    def _key(self) -> str:
-        order = "left" if self.is_left else "right"
-        return "{label}({order})".format(label=self.label, order=order)
-
-class PointToPlaneable(DirectionalMetric):
-    point_to_plane: bool
-
-    def __new__(cls, is_left: bool, point_to_plane: bool) -> 'PointToPlaneable':
-        instance = cls._get_existing(
-            label=cls.label,
-            is_left=is_left,
-            point_to_plane=point_to_plane,
-        )
-        if instance is None:
-            new_instance = super(PointToPlaneable, cls).__new__(cls, is_left)
-            new_instance.is_left = is_left
-            new_instance.point_to_plane = point_to_plane
-            cls._instances.append(new_instance)
-            return new_instance
-        return instance
-
-    def _match(self, **kwargs) -> bool:
-        return (
-            ("label" in kwargs) and
-            (self.label == kwargs["label"]) and
-            ("is_left" in kwargs) and
-            (self.is_left == kwargs["is_left"]) and
-            ("point_to_plane" in kwargs) and
-            (self.point_to_plane == kwargs["point_to_plane"])
-        )
-
-    def _key(self) -> str:
-        order = "left" if self.is_left else "right"
-        proj_type = "p2plane" if self.point_to_plane else "p2point"
-        return "{label}({proj_type})({order})".format(
-            label=self.label,
-            proj_type=proj_type,
-            order=order,
-        )
-
-class ErrorVector(PointToPlaneable):
-    label = "ErrorVector"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        cloud_idx = 0 if self.is_left else 1
-        errs = np.subtract(
-            cloud_pair.clouds[cloud_idx].points,
-            cloud_pair._neigh_clouds[cloud_idx].points,
-        )
-        if not self.point_to_plane:
-            self.value = errs
-        else:
-            normals = np.asarray(cloud_pair.clouds[(cloud_idx + 1) % 1].normals)
-            plane_errs = np.zeros(shape=(errs.shape[0],))
-            for i in range(errs.shape[0]):
-                plane_errs[i] = np.dot(errs[i], normals[i])
-            self.value = plane_errs
-        self.is_calculated = True
-
-class EuclideanDistance(PointToPlaneable):
-    label = "EuclideanDistance"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        cloud_idx = 0 if self.is_left else 1
-        if not self.point_to_plane:
-            self.value = cloud_pair._neigh_dists[cloud_idx]
-        else:
-            errs = ErrorVector(
-                is_left=self.is_left,
-                point_to_plane=self.point_to_plane,
-            )
-            if not errs.is_calculated:
-                errs.calculate(cloud_pair)
-            self.value = np.square(errs.value)
-        self.is_calculated = True
-
-class BoundarySqrtDistances(SimpleMetric):
-    label = "BoundarySqrtDistances"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        inner_dists = cloud_pair.clouds[0].compute_nearest_neighbor_distance()
-        self.value = (np.min(inner_dists), np.max(inner_dists))
-        self.is_calculated = True
-
-class MinSqrtDistance(SimpleMetric):
-    label = "MinSqrtDistance"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        boundary_metric = BoundarySqrtDistances()
-        if not boundary_metric.is_calculated:
-            boundary_metric.calculate(cloud_pair)
-        self.value = boundary_metric.value[0]
-        self.is_calculated = True
-
-class MaxSqrtDistance(SimpleMetric):
-    label = "MaxSqrtDistance"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        boundary_metric = BoundarySqrtDistances()
-        if not boundary_metric.is_calculated:
-            boundary_metric.calculate(cloud_pair)
-        self.value = boundary_metric.value[1]
-        self.is_calculated = True
-
-class GeoMSE(PointToPlaneable):
-    label = "GeoMSE"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        dists = EuclideanDistance(
-            is_left=self.is_left,
-            point_to_plane=self.point_to_plane,
-        )
-        if not dists.is_calculated:
-            dists.calculate(cloud_pair)
-
-        n = dists.value.shape[0]
-        sse = np.sum(dists.value, axis=0)
-        self.value = sse / n
-        self.is_calculated = True
-
-class GeoPSNR(PointToPlaneable):
-    label = "GeoPSNR"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()
-        peak = np.max(bounding_box.extent)
-
-        geo_mse = GeoMSE(
-            is_left=self.is_left,
-            point_to_plane=self.point_to_plane,
-        )
-
-        if not geo_mse.is_calculated:
-            geo_mse.calculate(cloud_pair)
-
-        self.value = 10 * np.log10(peak**2 / geo_mse.value)
-        self.is_calculated = True
-
-class ColorMSE(DirectionalMetric):
-    label = "ColorMSE"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        cloud_idx = 0 if self.is_left else 1
-        diff = np.subtract(
-            cloud_pair.clouds[cloud_idx].colors,
-            cloud_pair._neigh_clouds[cloud_idx].colors,
-        )
-        self.value = np.mean(diff**2, axis=0)
-        self.is_calculated = True
-
-class ColorPSNR(DirectionalMetric):
-    label = "ColorPSNR"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        peak = 255
-        color_mse = ColorMSE(is_left=self.is_left)
-        if not color_mse.is_calculated:
-            color_mse.calculate(cloud_pair)
-
-        self.value = 10 * np.log10(peak**2 / color_mse.value)
-        self.is_calculated = True
-
-class GeoHausdorffDistance(PointToPlaneable):
-    label = "GeoHausdorffDistance"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        dists = EuclideanDistance(
-            is_left=self.is_left,
-            point_to_plane=self.point_to_plane,
-        )
-        if not dists.is_calculated:
-            dists.calculate(cloud_pair)
-        self.value = np.max(dists.value, axis=0)
-        self.is_calculated = True
-
-class GeoHausdorffDistancePSNR(PointToPlaneable):
-    label = "GeoHausdorffDistancePSNR"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        max_sqrt = MaxSqrtDistance()
-        if not max_sqrt.is_calculated:
-            max_sqrt.calculate(cloud_pair)
-
-        hausdorff = GeoHausdorffDistance(
-            is_left=self.is_left,
-            point_to_plane=self.point_to_plane,
-        )
-        if not hausdorff.is_calculated:
-            hausdorff.calculate(cloud_pair)
-
-        self.value = 10 * np.log10(max_sqrt.value**2 / hausdorff.value)
-        self.is_calculated = True
-
-class ColorHausdorffDistance(DirectionalMetric):
-    label = "ColorHausdorffDistance"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        cloud_idx = 0 if self.is_left else 1
-        diff = np.subtract(
-            cloud_pair.clouds[cloud_idx].colors,
-            cloud_pair._neigh_clouds[cloud_idx].colors
-        )
-        rgb_scale = 255
-        self.value = np.max((rgb_scale * diff)**2, axis=0)
-        self.is_calculated = True
-
-class ColorHausdorffDistancePSNR(DirectionalMetric):
-    label = "ColorHausdorffDistancePSNR"
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        peak = 255
-        hausdorff = ColorHausdorffDistance(
-            is_left=self.is_left,
-        )
-        if not hausdorff.is_calculated:
-            hausdorff.calculate(cloud_pair)
-        self.value = 10 * np.log10(peak**2 / hausdorff.value)
-        self.is_calculated = True
-
-class SymmetricMetric(SimpleMetric):
-    is_proportional: bool
-    metrics: typing.List[DirectionalMetric]
-
-    def __init__(
-        self,
-        metrics: typing.List[DirectionalMetric],
-        is_proportional: bool,
-    ):
-        if len(metrics) != 2:
-            raise ValueError("Must be exactly two metrics")
-        if metrics[0].label != metrics[1].label:
-            raise ValueError(
-                "Metrics must be of same class, got: {lmetric}, {rmetric}"
-                    .format(lmetric=metrics[0].label, rmetric=metrics[1].label)
-            )
-        self.label = metrics[0].label + "(symmetric)"
-        self.metrics = metrics
-        self.is_proportional = is_proportional
-
-    def _key(self) -> str:
-        if hasattr(self.metrics[0], "point_to_plane"):
-            return "{label}({p2plane})(symmetric)".format(
-                label=self.metrics[0].label,
-                p2plane="p2plane" if self.metrics[0].point_to_plane else "p2point",
-            )
-        return self.label
-
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-    ) -> None:
-        for metric in self.metrics:
-            if not metric.is_calculated:
-                metric.calculate(cloud_pair)
-        values = [m.value for m in self.metrics] # value is scalar or ndarray
-        if self.is_proportional:
-            self.value = min(values, key=np.linalg.norm)
-        else:
-            self.value = max(values, key=np.linalg.norm)
-        self.is_calculated = True
-
-    def __repr__(self) -> str:
-        return "{label}:{metrics}".format(label=self.label, metrics=self.metrics)
-
-class CalculateOptions:
-    color: typing.Optional[str]
-    hausdorff: bool
-    point_to_plane: bool
-
-    def __init__(
-        self,
-        color: typing.Optional[str] = None,
-        hausdorff: bool = False,
-        point_to_plane: bool = False,
-    ):
-        self.color = color
-        self.hausdorff = hausdorff
-        self.point_to_plane = point_to_plane
-
-class CalculateResult:
-    _metrics: typing.List[AbstractMetric]
-
-    def __init__(self, metrics: typing.List[AbstractMetric]):
-        self._metrics = metrics
-
-    def as_dict(self) -> typing.Dict[str, typing.Any]:
-        d = dict()
-        for metric in self._metrics:
-            d[metric._key()] = metric.value
-        return d
-
-    def as_df(self) -> pd.DataFrame:
-        # metrics = [str(metric) for metric in self._metrics]
-        metric_dict = {
-            "label": [],
-            "is_left": [],
-            "point-to-plane": [],
-            "value": [],
-        }
-
-        for metric in self._metrics:
-            metric_dict["label"].append(metric.label)
-            is_left = ""
-            if hasattr(metric, "is_left"):
-                is_left = metric.is_left
-            metric_dict["is_left"].append(is_left)
-            point_to_plane = ""
-            if hasattr(metric, "point_to_plane"):
-                point_to_plane = metric.point_to_plane
-            metric_dict["point-to-plane"].append(point_to_plane)
-            metric_dict["value"].append(str(metric.value))
-
-        return pd.DataFrame(metric_dict)
-
-    def __str__(self) -> str:
-        return str(self.as_df())
-
-class MetricCalculator:
-    def calculate(
-        self,
-        cloud_pair: CloudPair,
-        options: CalculateOptions,
-    ) -> CalculateResult:
+    def _transform_options(self, options: 'CalculateOptions') -> typing.List['AbstractMetric']:
         metrics = [
             MinSqrtDistance(),
             MaxSqrtDistance(),
@@ -582,8 +162,8 @@ class MetricCalculator:
         ]
 
         if (
-            cloud_pair.clouds[0].has_colors() and
-            cloud_pair.clouds[1].has_colors() and
+            self.clouds[0].has_colors() and
+            self.clouds[1].has_colors() and
             (options.color is not None)
         ):
             metrics += [
@@ -673,25 +253,409 @@ class MetricCalculator:
                 ),
             ]
 
-        print("{num} metrics to calculate".format(num=len(metrics)))
+        return metrics
 
-        for metric in metrics:
-            if not metric.is_calculated:
-                metric.calculate(cloud_pair)
+    def _metric_recursive_calculate(self, metric: 'AbstractMetric') -> 'AbstractMetric':
+        if metric._key() in self._calculated_metrics:
+            return self._calculated_metrics[metric._key()]
 
-        calculated_metrics = list(filter(lambda m: m.is_calculated, metrics))
+        calculated_deps = {}
+        for dep_key, dep_metric in metric._get_dependencies().items():
+            calculated_dep_metric = self._metric_recursive_calculate(dep_metric)
+            calculated_deps[dep_key] = calculated_dep_metric
 
-        if len(calculated_metrics) != len(metrics):
-            raise RuntimeWarning("Not all metrics were calculated")
+        metric.calculate(self, **calculated_deps)
+        self._calculated_metrics[metric._key()] = metric
 
-        return CalculateResult(calculated_metrics)
+        return metric
+
+    def calculate(self, options: 'CalculateOptions') -> 'CalculateResult':
+        metrics_list = self._transform_options(options)
+
+        calculated_metrics_list = []
+        for metric in metrics_list:
+            calculated_metric = self._metric_recursive_calculate(metric)
+            calculated_metrics_list.append(calculated_metric)
+
+        return CalculateResult(calculated_metrics_list)
+
+class AbstractMetric(abc.ABC):
+    value: typing.Any
+    is_calculated: bool = False
+
+    def _key(self) -> typing.Tuple:
+        return (self.__class__.__name__,)
+
+    def _get_dependencies(self) -> typing.Dict[str, 'AbstractMetric']:
+        return {}
+
+    @abc.abstractmethod
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        **kwargs: typing.Dict[str, 'AbstractMetric']
+    ) -> None:
+        raise NotImplementedError("calculate is not implemented")
+
+    def __str__(self) -> str:
+        return "{key}: {value}".format(key=self._key(), value=str(self.value))
+
+class DirectionalMetric(AbstractMetric):
+    is_left: bool
+
+    def __init__(self, is_left: bool):
+        self.is_left = is_left
+
+    def _key(self) -> typing.Tuple:
+        return super()._key() + (self.is_left,)
+
+class PointToPlaneable(DirectionalMetric):
+    point_to_plane: bool
+
+    def __init__(self, is_left: bool, point_to_plane: bool):
+        super().__init__(is_left)
+        self.point_to_plane = point_to_plane
+
+    def _key(self) -> typing.Tuple:
+        return super()._key() + (self.point_to_plane,)
+
+class ErrorVector(PointToPlaneable):
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        **kwargs,
+    ) -> None:
+        cloud_idx = 0 if self.is_left else 1
+        errs = np.subtract(
+            cloud_pair.clouds[cloud_idx].points,
+            cloud_pair._neigh_clouds[cloud_idx].points,
+        )
+        if not self.point_to_plane:
+            self.value = errs
+        else:
+            normals = np.asarray(cloud_pair.clouds[(cloud_idx + 1) % 1].normals)
+            plane_errs = np.zeros(shape=(errs.shape[0],))
+            for i in range(errs.shape[0]):
+                plane_errs[i] = np.dot(errs[i], normals[i])
+            self.value = plane_errs
+        self.is_calculated = True
+
+class EuclideanDistance(PointToPlaneable):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        if not self.point_to_plane:
+            return {}
+
+        return {
+            "error_vector": ErrorVector(
+                is_left=self.is_left,
+                point_to_plane=self.point_to_plane,
+            )
+        }
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        error_vector: typing.Optional[ErrorVector] = None,
+    ) -> None:
+        cloud_idx = 0 if self.is_left else 1
+        if not self.point_to_plane:
+            self.value = cloud_pair._neigh_dists[cloud_idx]
+        else:
+            self.value = np.square(error_vector.value)
+        self.is_calculated = True
+
+class BoundarySqrtDistances(AbstractMetric):
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        **kwargs,
+    ) -> None:
+        inner_dists = cloud_pair.clouds[0].compute_nearest_neighbor_distance()
+        self.value = (np.min(inner_dists), np.max(inner_dists))
+        self.is_calculated = True
+
+class MinSqrtDistance(AbstractMetric):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {"boundary_metric": BoundarySqrtDistances()}
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        **kwargs,
+    ) -> None:
+        boundary_metric = BoundarySqrtDistances()
+        if not boundary_metric.is_calculated:
+            boundary_metric.calculate(cloud_pair)
+        self.value = boundary_metric.value[0]
+        self.is_calculated = True
+
+class MaxSqrtDistance(AbstractMetric):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {"boundary_metric": BoundarySqrtDistances()}
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        boundary_metric: BoundarySqrtDistances,
+    ) -> None:
+        self.value = boundary_metric.value[1]
+        self.is_calculated = True
+
+class GeoMSE(PointToPlaneable):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {
+            "euclidean_distance": EuclideanDistance(
+                is_left=self.is_left,
+                point_to_plane=self.point_to_plane,
+            )
+        }
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        euclidean_distance: EuclideanDistance,
+    ) -> None:
+        n = euclidean_distance.value.shape[0]
+        sse = np.sum(euclidean_distance.value, axis=0)
+        self.value = sse / n
+        self.is_calculated = True
+
+class GeoPSNR(PointToPlaneable):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {
+            "geo_mse": GeoMSE(
+                is_left=self.is_left,
+                point_to_plane=self.point_to_plane,
+            )
+        }
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        geo_mse: GeoMSE,
+    ) -> None:
+        bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()
+        peak = np.max(bounding_box.extent)
+        self.value = 10 * np.log10(peak**2 / geo_mse.value)
+        self.is_calculated = True
+
+class ColorMSE(DirectionalMetric):
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        **kwargs,
+    ) -> None:
+        cloud_idx = 0 if self.is_left else 1
+        diff = np.subtract(
+            cloud_pair.clouds[cloud_idx].colors,
+            cloud_pair._neigh_clouds[cloud_idx].colors,
+        )
+        self.value = np.mean(diff**2, axis=0)
+        self.is_calculated = True
+
+class ColorPSNR(DirectionalMetric):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {"color_mse": ColorMSE(is_left=self.is_left)}
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        color_mse: ColorMSE,
+    ) -> None:
+        peak = 255
+        self.value = 10 * np.log10(peak**2 / color_mse.value)
+        self.is_calculated = True
+
+class GeoHausdorffDistance(PointToPlaneable):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {
+            "euclidean_distance": EuclideanDistance(
+                is_left=self.is_left,
+                point_to_plane=self.point_to_plane,
+            )
+        }
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        euclidean_distance: EuclideanDistance,
+    ) -> None:
+        self.value = np.max(euclidean_distance.value, axis=0)
+        self.is_calculated = True
+
+class GeoHausdorffDistancePSNR(PointToPlaneable):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {
+            "max_sqrt": MaxSqrtDistance(),
+            "hausdorff_distance": GeoHausdorffDistance(
+                is_left=self.is_left,
+                point_to_plane=self.point_to_plane,
+            ),
+        }
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        max_sqrt: MaxSqrtDistance,
+        hausdorff_distance: GeoHausdorffDistance,
+    ) -> None:
+        self.value = 10 * np.log10(max_sqrt.value**2 / hausdorff_distance.value)
+        self.is_calculated = True
+
+class ColorHausdorffDistance(DirectionalMetric):
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+    ) -> None:
+        cloud_idx = 0 if self.is_left else 1
+        diff = np.subtract(
+            cloud_pair.clouds[cloud_idx].colors,
+            cloud_pair._neigh_clouds[cloud_idx].colors
+        )
+        rgb_scale = 255
+        self.value = np.max((rgb_scale * diff)**2, axis=0)
+        self.is_calculated = True
+
+class ColorHausdorffDistancePSNR(DirectionalMetric):
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {"hausdorff_distance": ColorHausdorffDistance(is_left=self.is_left)}
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        hausdorff_distance: ColorHausdorffDistance,
+    ) -> None:
+        peak = 255
+        self.value = 10 * np.log10(peak**2 / hausdorff_distance.value)
+        self.is_calculated = True
+
+class SymmetricMetric(AbstractMetric):
+    is_proportional: bool
+    metrics: typing.List[DirectionalMetric]
+
+    def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
+        return {
+            "lmetric": self.metrics[0],
+            "rmetric": self.metrics[1],
+        }
+
+    def __init__(
+        self,
+        metrics: typing.List[DirectionalMetric],
+        is_proportional: bool,
+    ):
+        if len(metrics) != 2:
+            raise ValueError("Must be exactly two metrics")
+        if metrics[0].__class__ != metrics[1].__class__:
+            raise ValueError(
+                "Metrics must be of same class, got: {lmetric}, {rmetric}"
+                    .format(lmetric=metrics[0].__class__, rmetric=metrics[1].__class__)
+            )
+        self.metrics = metrics
+        self.is_proportional = is_proportional
+
+    def _key(self) -> typing.Tuple:
+        return super()._key() + self.metrics[0]._key() + self.metrics[1]._key()
+
+    def calculate(
+        self,
+        cloud_pair: CloudPair,
+        lmetric: AbstractMetric,
+        rmetric: AbstractMetric,
+    ) -> None:
+        values = [m.value for m in (lmetric, rmetric)] # value is scalar or ndarray
+        if self.is_proportional:
+            self.value = min(values, key=np.linalg.norm)
+        else:
+            self.value = max(values, key=np.linalg.norm)
+        self.is_calculated = True
+
+    # def __repr__(self) -> str:
+    #     return "{label}:{metrics}".format(label=self.label, metrics=self.metrics)
+
+class CalculateOptions:
+    color: typing.Optional[str]
+    hausdorff: bool
+    point_to_plane: bool
+
+    def __init__(
+        self,
+        color: typing.Optional[str] = None,
+        hausdorff: bool = False,
+        point_to_plane: bool = False,
+    ):
+        self.color = color
+        self.hausdorff = hausdorff
+        self.point_to_plane = point_to_plane
+
+class CalculateResult:
+    _metrics: typing.List[AbstractMetric]
+
+    def __init__(self, metrics: typing.List[AbstractMetric]):
+        self._metrics = metrics
+
+    def as_dict(self) -> typing.Dict[str, typing.Any]:
+        d = dict()
+        for metric in self._metrics:
+            d[metric._key()] = metric.value
+        return d
+
+    def as_df(self) -> pd.DataFrame:
+        # metrics = [str(metric) for metric in self._metrics]
+        metric_dict = {
+            "label": [],
+            "is_left": [],
+            "point-to-plane": [],
+            "value": [],
+        }
+
+        for metric in self._metrics:
+            label = metric.__class__.__name__
+            if isinstance(metric, SymmetricMetric):
+                child_label = metric.metrics[0].__class__.__name__
+                label = child_label + "(symmetric)"
+            metric_dict["label"].append(label)
+            is_left = ""
+            if hasattr(metric, "is_left"):
+                is_left = metric.is_left
+            metric_dict["is_left"].append(is_left)
+            point_to_plane = ""
+            if hasattr(metric, "point_to_plane"):
+                point_to_plane = metric.point_to_plane
+            metric_dict["point-to-plane"].append(point_to_plane)
+            metric_dict["value"].append(str(metric.value))
+
+        return pd.DataFrame(metric_dict)
+
+    def __str__(self) -> str:
+        return str(self.as_df())
+
+# class MetricCalculator:
+#     def calculate(
+#         self,
+#         cloud_pair: CloudPair,
+#         options: CalculateOptions,
+#     ) -> CalculateResult:
+
+
+#         print("{num} metrics to calculate".format(num=len(metrics)))
+
+#         for metric in metrics:
+#             if not metric.is_calculated:
+#                 metric.calculate(cloud_pair)
+
+#         calculated_metrics = list(filter(lambda m: m.is_calculated, metrics))
+
+#         if len(calculated_metrics) != len(metrics):
+#             raise RuntimeWarning("Not all metrics were calculated")
+
+#         return CalculateResult(calculated_metrics)
 
 def calculate_from_files(
     ocloud_file: str,
     pcloud_file: str,
     calculate_options: CalculateOptions,
-    ) -> typing.Dict[str, np.float64]:
+    ) -> pd.DataFrame:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
     cloud_pair = CloudPair(ocloud, pcloud, calculate_options.color)
-    calculator = MetricCalculator()
-    return calculator.calculate(cloud_pair, calculate_options)
+    return cloud_pair.calculate(calculate_options).as_df()
