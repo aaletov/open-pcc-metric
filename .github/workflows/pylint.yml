@@ -22,4 +22,4 @@ jobs:
       run: |
         pylint --rcfile ${{ github.workspace }}/pylintrc \
           --disable=import-error \
-          $(git ls-files '*.py')$(git ls-files '*.py')
+          ${{ github.workspace }}/open_pcc_metric
