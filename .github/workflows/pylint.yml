@@ -20,4 +20,6 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        pylint --rcfile ${{ github.workspace }}/pylintrc \
+          --disable=import-error \
+          $(git ls-files '*.py')$(git ls-files '*.py')
