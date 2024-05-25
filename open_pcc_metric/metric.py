@@ -1,6 +1,7 @@
 import typing
 import abc
 import numpy as np
+import pandas as pd
 import open3d as o3d
 
 # Metrics to calculate:
@@ -149,7 +150,7 @@ class AbstractMetric(abc.ABC):
         return None
 
     def _key(self) -> str:
-        return "{label}"
+        return self.label
 
     def __str__(self) -> str:
         return "{key}: {value}".format(key=self._key(), value=str(self.value))
@@ -327,6 +328,7 @@ class GeoMSE(PointToPlaneable):
         )
         if not dists.is_calculated:
             dists.calculate(cloud_pair)
+
         n = dists.value.shape[0]
         sse = np.sum(dists.value, axis=0)
         self.value = sse / n
@@ -524,8 +526,31 @@ class CalculateResult:
             d[metric._key()] = metric.value
         return d
 
+    def as_df(self) -> pd.DataFrame:
+        # metrics = [str(metric) for metric in self._metrics]
+        metric_dict = {
+            "label": [],
+            "is_left": [],
+            "point-to-plane": [],
+            "value": [],
+        }
+
+        for metric in self._metrics:
+            metric_dict["label"].append(metric.label)
+            is_left = ""
+            if hasattr(metric, "is_left"):
+                is_left = metric.is_left
+            metric_dict["is_left"].append(is_left)
+            point_to_plane = ""
+            if hasattr(metric, "point_to_plane"):
+                point_to_plane = metric.point_to_plane
+            metric_dict["point-to-plane"].append(point_to_plane)
+            metric_dict["value"].append(str(metric.value))
+
+        return pd.DataFrame(metric_dict)
+
     def __str__(self) -> str:
-        return "\n".join([str(metric) for metric in self._metrics])
+        return str(self.as_df())
 
 class MetricCalculator:
     def calculate(
