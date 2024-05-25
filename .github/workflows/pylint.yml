@@ -17,9 +17,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint==3.2.2
+        pip install pylint
     - name: Analysing the code with pylint
       run: |
         pylint --rcfile ${{ github.workspace }}/pylintrc \
           --disable=import-error \
+          --fail-under 5 \
+          --fail-on E \
           ${{ github.workspace }}/open_pcc_metric
