@@ -48,7 +48,7 @@ def test_default_error_vector(
 # add point_to_plane (how to setup normals?)
 @pytest.mark.parametrize(
     "is_left,point_to_plane",
-    [(True, False), (False, False)],
+    [(True, False), (False, False), (True, True), (False, True)],
 )
 def test_default_euclidean_distance(
     is_left: bool,
