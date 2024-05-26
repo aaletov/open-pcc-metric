@@ -1,8 +1,19 @@
 import click
 
+
 @click.command()
-@click.option("--ocloud", required=True, type=str, help="Original point cloud.")
-@click.option("--pcloud", required=True, type=str, help="Processed point cloud.")
+@click.option(
+    "--ocloud",
+    required=True,
+    type=str,
+    help="Original point cloud.",
+)
+@click.option(
+    "--pcloud",
+    required=True,
+    type=str,
+    help="Processed point cloud.",
+)
 @click.option(
     "--color",
     required=False,
@@ -24,7 +35,13 @@ import click
     is_flag=True,
     help="Report point-to-plane distance as well.",
 )
-def cli(ocloud: str, pcloud: str, color: str, hausdorff: bool, point_to_plane: bool) -> None:
+def cli(
+    ocloud: str,
+    pcloud: str,
+    color: str,
+    hausdorff: bool,
+    point_to_plane: bool,
+) -> None:
     from . import metric
 
     options = metric.CalculateOptions(
