@@ -146,7 +146,11 @@ class ErrorVector(SecondaryMetric, PointToPlaneable):
         cloud_normals: typing.Optional[CloudNormals] = None,
     ) -> None:
         if not self.point_to_plane:
-            self.value = primary_error_vector.value
+            self.value = np.apply_along_axis(
+                func1d=np.linalg.norm,
+                axis=1,
+                arr=primary_error_vector.value,
+            )
             return
 
         error_shape = primary_error_vector.value.shape

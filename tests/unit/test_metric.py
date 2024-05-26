@@ -37,10 +37,10 @@ def test_default_error_vector(
     )
     if not point_to_plane:
         primary_error_vector = opmm.PrimaryErrorVector(is_left=is_left)
-        primary_error_vector.value = np.ones(shape=(3, 3), dtype="float64")
+        primary_error_vector.value = np.ones(shape=(5, 3), dtype="float64")
         error_vector.calculate(primary_error_vector)
-        residual = primary_error_vector.value - error_vector.value
-        assert (np.isclose(np.linalg.norm(residual), 0.0))
+        expected_error_value = np.sqrt(3) * np.ones(shape=(5,))
+        assert (np.allclose(error_vector.value, expected_error_value))
     else:
         assert (True)
 
@@ -54,7 +54,16 @@ def test_default_euclidean_distance(
     is_left: bool,
     point_to_plane: bool,
 ):
-    assert (True)
+    euclidean_distance = opmm.EuclideanDistance(
+        is_left=is_left,
+        point_to_plane=point_to_plane,
+    )
+    primary_error_vector = opmm.PrimaryErrorVector(is_left=is_left)
+    primary_error_vector.value = 2 * np.ones(shape=(5,))
+    neighbour_distances = opmm.NeighbourDistances(is_left=is_left)
+    neighbour_distances.value = 4 * np.ones(shape=(5,))
+    euclidean_distance.calculate(neighbour_distances, primary_error_vector)
+    assert (np.allclose(neighbour_distances.value, euclidean_distance.value))
 
 
 def test_default_boundary_sqrt_distance(default_cloud_pair: opmm.CloudPair):
