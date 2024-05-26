@@ -64,33 +64,3 @@ def test_default_euclidean_distance(
     neighbour_distances.value = 4 * np.ones(shape=(5,))
     euclidean_distance.calculate(neighbour_distances, primary_error_vector)
     assert (np.allclose(neighbour_distances.value, euclidean_distance.value))
-
-
-def test_default_boundary_sqrt_distance(default_cloud_pair: opmm.CloudPair):
-    assert (True)
-
-
-# add point_to_plane (how to setup normals?)
-@pytest.mark.parametrize(
-    "is_left,point_to_plane",
-    [(True, False), (False, False)],
-)
-def test_default_geo_mse(
-    default_cloud_pair: opmm.CloudPair,
-    is_left: bool,
-    point_to_plane: bool,
-):
-    assert (True)
-
-
-# add point_to_plane (how to setup normals?)
-@pytest.mark.parametrize(
-    "is_left,point_to_plane",
-    [(True, False), (False, False)],
-)
-def test_default_geo_psnr(
-    default_cloud_pair: opmm.CloudPair,
-    is_left: bool,
-    point_to_plane: bool,
-):
-    assert (True)
