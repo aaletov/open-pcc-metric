@@ -29,7 +29,7 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint --rcfile ${{ github.workspace }}/pylintrc \
+        pylint --rcfile ${{ github.workspace }}/.pylintrc \
           --disable=import-error \
           --fail-under 5 \
           --fail-on E \
