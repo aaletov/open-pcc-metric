@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.8.1"
 click = "^8.1.7"
 open3d = "^0.18.0"
 addict = "2.4.0"
@@ -24,6 +24,7 @@ pyquaternion = "0.9.9"
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.2.0"
 pytest = "^8.2.0"
+flake8 = "^7.0.0"
 
 [build-system]
 requires = ["poetry-core"]
