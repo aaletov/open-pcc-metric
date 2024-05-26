@@ -1,0 +1,57 @@
+classDiagram
+  class AbstractMetric {
+    value
+    calculate(cloud_pair: CloudPair)* None
+  }
+  class CloudPair {
+    clouds : typing.Tuple[PointCloud, PointCloud]
+    origin_cloud
+    reconst_cloud
+    get_boundary_sqrt_distances()
+    get_extent()
+    get_left_colors()
+    get_left_error_vector()
+    get_left_neighbour_colors()
+    get_left_neighbour_distances()
+    get_right_colors()
+    get_right_error_vector()
+    get_right_neighbour_colors()
+    get_right_neighbour_distances()
+  }
+  class ColorMetric {
+    color_scheme : str
+  }
+  class DirectionalMetric {
+    is_left : bool
+  }
+  class MetricCalculator {
+    calculate(metrics_list: typing.List[AbstractMetric]) CalculateResult
+  }
+  class PointToPlaneable {
+    point_to_plane : bool
+  }
+  class PrimaryMetric {
+    calculate(cloud_pair: CloudPair)* None
+  }
+  class SecondaryMetric {
+    calculate()* None
+  }
+  class SymmetricMetric {
+    is_proportional : bool
+    metrics : typing.List[DirectionalMetric]
+    value
+    calculate(lmetric: AbstractMetric, rmetric: AbstractMetric) None
+  }
+  class CloudColors {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  CloudColors --|> DirectionalMetric
+  CloudColors --|> PrimaryMetric
+  ColorMetric --|> DirectionalMetric
+  DirectionalMetric --|> AbstractMetric
+  PointToPlaneable --|> DirectionalMetric
+  PrimaryMetric --|> AbstractMetric
+  SecondaryMetric --|> AbstractMetric
+  SymmetricMetric --|> SecondaryMetric
+  CloudPair --* MetricCalculator : _cloud_pair
