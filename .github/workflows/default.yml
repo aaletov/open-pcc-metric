@@ -60,3 +60,24 @@ jobs:
       with:
         name: unit-report
         path: report.xml
+
+  publish-wheel:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'create'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python3 -m venv $POETRY_HOME
+        $POETRY_HOME/bin/pip install poetry==1.8.1
+        $POETRY_HOME/bin/poetry --version
+    - name: Build and publish
+      run: |
+        $POETRY_HOME/bin/poetry config pypi-token.pypi ${{ env.PYPI_TOKEN }}
+        $POETRY_HOME/bin/poetry publish --build
