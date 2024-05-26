@@ -1,0 +1,65 @@
+name: Default
+
+on:
+  push:
+    branches:
+      - "main"
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  pylint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+    - name: Analysing the code with pylint
+      run: |
+        pylint --rcfile ${{ github.workspace }}/pylintrc \
+          --disable=import-error \
+          --fail-under 5 \
+          --fail-on E \
+          ${{ github.workspace }}/open_pcc_metric
+
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python3 -m venv $POETRY_HOME
+        $POETRY_HOME/bin/pip install poetry==1.8.1
+        $POETRY_HOME/bin/poetry --version
+        $POETRY_HOME/bin/poetry install
+    - name: Test with pytest
+      run: |
+        export ENV_PATH=$(${POETRY_HOME}/bin/poetry env info -p)
+        ${ENV_PATH}/bin/pytest --junit-xml report.xml
+    - name: Upload docker meta
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-report
+        path: report.xml
