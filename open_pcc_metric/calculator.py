@@ -6,7 +6,10 @@ from .metric import (
     PrimaryMetric,
     SecondaryMetric,
 )
+from .logger import get_logger
 from .cloud_pair import CloudPair
+
+logger = get_logger()
 
 
 class CalculateResult:

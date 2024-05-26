@@ -1,21 +1,11 @@
 import typing
 import abc
-import sys
-import logging
 import numpy as np
 import open3d as o3d
+from .logger import get_logger
 from .cloud_pair import CloudPair
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-
-handler = logging.StreamHandler(sys.stderr)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+logger = get_logger()
 
 PointCloud = o3d.geometry.PointCloud
 KDFlann = o3d.geometry.KDTreeFlann

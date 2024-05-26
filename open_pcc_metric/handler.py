@@ -35,12 +35,19 @@ import click
     is_flag=True,
     help="Report point-to-plane distance as well.",
 )
+@click.option(
+    "--csv",
+    required=False,
+    is_flag=True,
+    help="Print output in csv format.",
+)
 def cli(
     ocloud: str,
     pcloud: str,
     color: str,
     hausdorff: bool,
     point_to_plane: bool,
+    csv: bool,
 ) -> None:
     import open3d as o3d
     from .cloud_pair import CloudPair
@@ -58,4 +65,7 @@ def cli(
     metrics = transform_options(options)
     result = calculator.calculate(metrics).as_df()
 
-    print(result.to_string())
+    if csv:
+        print(result.to_csv())
+    else:
+        print(result.to_string())
