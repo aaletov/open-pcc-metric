@@ -15,7 +15,7 @@ env:
   PYTHON_VERSION: "3.8"
 
 jobs:
-  pylint:
+  linters:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
+        pip install pylint flake8
     - name: Analysing the code with pylint
       run: |
         pylint --rcfile ${{ github.workspace }}/.pylintrc \
@@ -34,6 +34,11 @@ jobs:
           --fail-under 5 \
           --fail-on E \
           ${{ github.workspace }}/open_pcc_metric
+    - name: Analysing the code with flake8
+      run: |
+        flake8 --config=${{ github.workspace }}/.flake8 \
+          ${{ github.workspace }}/open_pcc_metric/*.py \
+          ${{ github.workspace }}/tests/**/*.py
 
   pytest:
     runs-on: ubuntu-latest
