@@ -426,7 +426,7 @@ class ColorHausdorffDistance(SecondaryMetric, ColorMetric):
         self.value = np.max(diff**2, axis=0)
 
 
-class ColorHausdorffDistancePSNR(ColorMetric):
+class ColorHausdorffDistancePSNR(SecondaryMetric, ColorMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
         return {
             "hausdorff_distance": ColorHausdorffDistance(
@@ -437,7 +437,6 @@ class ColorHausdorffDistancePSNR(ColorMetric):
 
     def calculate(
         self,
-        cloud_pair: CloudPair,
         hausdorff_distance: ColorHausdorffDistance,
     ) -> None:
         peak = get_color_peak(self.color_scheme)
