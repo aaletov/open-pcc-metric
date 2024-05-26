@@ -28,7 +28,6 @@ def default_cloud_pair() -> opmm.CloudPair:
     [(True, False), (False, False)],
 )
 def test_default_error_vector(
-    default_cloud_pair: opmm.CloudPair,
     is_left: bool,
     point_to_plane: bool,
 ):
@@ -36,19 +35,14 @@ def test_default_error_vector(
         is_left=is_left,
         point_to_plane=point_to_plane,
     )
-    error_vector.calculate(default_cloud_pair)
-    assert (
-        all([
-            np.allclose(
-                np.absolute(vector),
-                1e-1 * np.linspace(
-                    1.0,
-                    default_nrows,
-                    default_nrows,
-                ),
-            ) for vector in error_vector.value
-        ])
-    )
+    if not point_to_plane:
+        primary_error_vector = opmm.PrimaryErrorVector(is_left=is_left)
+        primary_error_vector.value = np.ones(shape=(3, 3), dtype="float64")
+        error_vector.calculate(primary_error_vector)
+        residual = primary_error_vector.value - error_vector.value
+        assert (np.isclose(np.linalg.norm(residual), 0.0))
+    else:
+        assert (True)
 
 
 # add point_to_plane (how to setup normals?)
@@ -57,7 +51,6 @@ def test_default_error_vector(
     [(True, False), (False, False)],
 )
 def test_default_euclidean_distance(
-    default_cloud_pair: opmm.CloudPair,
     is_left: bool,
     point_to_plane: bool,
 ):

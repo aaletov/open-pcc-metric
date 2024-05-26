@@ -42,18 +42,20 @@ def cli(
     hausdorff: bool,
     point_to_plane: bool,
 ) -> None:
-    from . import metric
+    import open3d as o3d
+    from .cloud_pair import CloudPair
+    from .calculator import MetricCalculator
+    from .options import CalculateOptions, transform_options
 
-    options = metric.CalculateOptions(
+    ocloud_cloud, pcloud_cloud = map(o3d.io.read_point_cloud, (ocloud, pcloud))
+    cloud_pair = CloudPair(ocloud_cloud, pcloud_cloud)
+    calculator = MetricCalculator(cloud_pair)
+    options = CalculateOptions(
         color=color,
         hausdorff=hausdorff,
         point_to_plane=point_to_plane,
     )
-
-    result = metric.calculate_from_files(
-        ocloud_file=ocloud,
-        pcloud_file=pcloud,
-        calculate_options=options,
-    )
+    metrics = transform_options(options)
+    result = calculator.calculate(metrics).as_df()
 
     print(result.to_string())
