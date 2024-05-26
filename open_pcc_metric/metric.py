@@ -11,18 +11,24 @@ logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stderr)
 handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 PointCloud = o3d.geometry.PointCloud
 KDFlann = o3d.geometry.KDTreeFlann
 
+
 class CloudPair:
     clouds: typing.Tuple[PointCloud, PointCloud]
     _trees: typing.Tuple[typing.Optional[KDFlann], typing.Optional[KDFlann]]
     _neigh_clouds: typing.Tuple[PointCloud, PointCloud]
-    _neigh_dists: typing.Tuple[typing.Optional[np.ndarray], typing.Optional[np.ndarray]]
+    _neigh_dists: typing.Tuple[
+        typing.Optional[np.ndarray],
+        typing.Optional[np.ndarray],
+    ]
     _calculated_metrics: typing.Dict[typing.Tuple, 'AbstractMetric'] = {}
 
     def __init__(
@@ -44,7 +50,7 @@ class CloudPair:
             kdtree=self._trees[1],
             n=0,
         )
-        reconst_neigh_cloud, reconst_neigh_dists = CloudPair.get_neighbour_cloud(
+        reconst_neigh_cloud, reconst_neigh_dists = CloudPair.get_neighbour_cloud(  # noqa: E501
             iter_cloud=self.clouds[1],
             search_cloud=self.clouds[0],
             kdtree=self._trees[0],
@@ -54,24 +60,29 @@ class CloudPair:
         self._neigh_dists = (origin_neigh_dists, reconst_neigh_dists)
 
     @staticmethod
-    def get_neighbour(
-        point: np.ndarray,
-        kdtree: o3d.geometry.KDTreeFlann,
-        n: int,
-    ) -> np.ndarray:
-        rpoint = point.reshape((3, 1))
-        [_, idx, dists] = kdtree.search_knn_vector_3d(rpoint, n + 1)
-        return np.array((idx[-1], dists[-1]))
-
-    @staticmethod
     def get_neighbour_cloud(
         iter_cloud: o3d.geometry.PointCloud,
         search_cloud: o3d.geometry.PointCloud,
         kdtree: o3d.geometry.KDTreeFlann,
         n: int,
     ) -> typing.Tuple[o3d.geometry.PointCloud, np.ndarray]:
-        finder = lambda point: CloudPair.get_neighbour(point, kdtree, n)
-        [idxs, sqrdists] = np.apply_along_axis(finder, axis=1, arr=iter_cloud.points).T
+        def get_neighbour(
+            point: np.ndarray,
+            kdtree: o3d.geometry.KDTreeFlann,
+            n: int,
+        ) -> np.ndarray:
+            rpoint = point.reshape((3, 1))
+            [_, idx, dists] = kdtree.search_knn_vector_3d(rpoint, n + 1)
+            return np.array((idx[-1], dists[-1]))
+
+        def finder(point: np.ndarray):
+            return get_neighbour(point, kdtree, n)
+
+        [idxs, sqrdists] = np.apply_along_axis(
+            finder,
+            axis=1,
+            arr=iter_cloud.points,
+        ).T
         idxs = idxs.astype(int)
         neigh_points = np.take(search_cloud.points, idxs, axis=0)
         neigh_cloud = o3d.geometry.PointCloud()
@@ -83,7 +94,10 @@ class CloudPair:
 
         return (neigh_cloud, sqrdists)
 
-    def _transform_options(self, options: 'CalculateOptions') -> typing.List['AbstractMetric']:
+    def _transform_options(
+        self,
+        options: 'CalculateOptions',
+    ) -> typing.List['AbstractMetric']:
         metrics = [
             MinSqrtDistance(),
             MaxSqrtDistance(),
@@ -161,8 +175,14 @@ class CloudPair:
                 GeoHausdorffDistance(is_left=False, point_to_plane=False),
                 SymmetricMetric(
                     metrics=(
-                        GeoHausdorffDistance(is_left=True, point_to_plane=False),
-                        GeoHausdorffDistance(is_left=False, point_to_plane=False),
+                        GeoHausdorffDistance(
+                            is_left=True,
+                            point_to_plane=False,
+                        ),
+                        GeoHausdorffDistance(
+                            is_left=False,
+                            point_to_plane=False,
+                        ),
                     ),
                     is_proportional=False,
                 ),
@@ -170,8 +190,14 @@ class CloudPair:
                 GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
                 SymmetricMetric(
                     metrics=(
-                        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=False),
-                        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=False),
+                        GeoHausdorffDistancePSNR(
+                            is_left=True,
+                            point_to_plane=False,
+                        ),
+                        GeoHausdorffDistancePSNR(
+                            is_left=False,
+                            point_to_plane=False,
+                        ),
                     ),
                     is_proportional=True,
                 ),
@@ -185,15 +211,27 @@ class CloudPair:
                 GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
                 SymmetricMetric(
                     metrics=(
-                        GeoHausdorffDistance(is_left=True, point_to_plane=True),
-                        GeoHausdorffDistance(is_left=False, point_to_plane=True),
+                        GeoHausdorffDistance(
+                            is_left=True,
+                            point_to_plane=True,
+                        ),
+                        GeoHausdorffDistance(
+                            is_left=False,
+                            point_to_plane=True,
+                        ),
                     ),
                     is_proportional=False,
                 ),
                 SymmetricMetric(
                     metrics=(
-                        GeoHausdorffDistancePSNR(is_left=True, point_to_plane=True),
-                        GeoHausdorffDistancePSNR(is_left=False, point_to_plane=True),
+                        GeoHausdorffDistancePSNR(
+                            is_left=True,
+                            point_to_plane=True,
+                        ),
+                        GeoHausdorffDistancePSNR(
+                            is_left=False,
+                            point_to_plane=True,
+                        ),
                     ),
                     is_proportional=True,
                 ),
@@ -201,13 +239,18 @@ class CloudPair:
 
         return metrics
 
-    def _metric_recursive_calculate(self, metric: 'AbstractMetric') -> 'AbstractMetric':
+    def _metric_recursive_calculate(
+        self,
+        metric: 'AbstractMetric',
+    ) -> 'AbstractMetric':
         if metric._key() in self._calculated_metrics:
             return self._calculated_metrics[metric._key()]
 
         calculated_deps = {}
         for dep_key, dep_metric in metric._get_dependencies().items():
-            calculated_dep_metric = self._metric_recursive_calculate(dep_metric)
+            calculated_dep_metric = self._metric_recursive_calculate(
+                metric=dep_metric,
+            )
             calculated_deps[dep_key] = calculated_dep_metric
 
         metric.calculate(self, **calculated_deps)
@@ -225,6 +268,7 @@ class CloudPair:
             calculated_metrics_list.append(calculated_metric)
 
         return CalculateResult(calculated_metrics_list)
+
 
 class AbstractMetric(abc.ABC):
     value: typing.Any
@@ -247,6 +291,7 @@ class AbstractMetric(abc.ABC):
     def __str__(self) -> str:
         return "{key}: {value}".format(key=self._key(), value=str(self.value))
 
+
 class DirectionalMetric(AbstractMetric):
     is_left: bool
 
@@ -255,6 +300,7 @@ class DirectionalMetric(AbstractMetric):
 
     def _key(self) -> typing.Tuple:
         return super()._key() + (self.is_left,)
+
 
 class PointToPlaneable(DirectionalMetric):
     point_to_plane: bool
@@ -265,6 +311,7 @@ class PointToPlaneable(DirectionalMetric):
 
     def _key(self) -> typing.Tuple:
         return super()._key() + (self.point_to_plane,)
+
 
 class ErrorVector(PointToPlaneable):
     def calculate(
@@ -280,12 +327,15 @@ class ErrorVector(PointToPlaneable):
         if not self.point_to_plane:
             self.value = errs
         else:
-            normals = np.asarray(cloud_pair.clouds[(cloud_idx + 1) % 1].normals)
+            normals = np.asarray(
+                a=cloud_pair.clouds[(cloud_idx + 1) % 1].normals,
+            )
             plane_errs = np.zeros(shape=(errs.shape[0],))
             for i in range(errs.shape[0]):
                 plane_errs[i] = np.dot(errs[i], normals[i])
             self.value = plane_errs
         self.is_calculated = True
+
 
 class EuclideanDistance(PointToPlaneable):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
@@ -311,6 +361,7 @@ class EuclideanDistance(PointToPlaneable):
             self.value = np.square(error_vector.value)
         self.is_calculated = True
 
+
 class BoundarySqrtDistances(AbstractMetric):
     def calculate(
         self,
@@ -320,6 +371,7 @@ class BoundarySqrtDistances(AbstractMetric):
         inner_dists = cloud_pair.clouds[0].compute_nearest_neighbor_distance()
         self.value = (np.min(inner_dists), np.max(inner_dists))
         self.is_calculated = True
+
 
 class MinSqrtDistance(AbstractMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
@@ -336,6 +388,7 @@ class MinSqrtDistance(AbstractMetric):
         self.value = boundary_metric.value[0]
         self.is_calculated = True
 
+
 class MaxSqrtDistance(AbstractMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
         return {"boundary_metric": BoundarySqrtDistances()}
@@ -347,6 +400,7 @@ class MaxSqrtDistance(AbstractMetric):
     ) -> None:
         self.value = boundary_metric.value[1]
         self.is_calculated = True
+
 
 class GeoMSE(PointToPlaneable):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
@@ -367,6 +421,7 @@ class GeoMSE(PointToPlaneable):
         self.value = sse / n
         self.is_calculated = True
 
+
 class GeoPSNR(PointToPlaneable):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
         return {
@@ -381,10 +436,11 @@ class GeoPSNR(PointToPlaneable):
         cloud_pair: CloudPair,
         geo_mse: GeoMSE,
     ) -> None:
-        bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()
+        bounding_box: o3d.geometry.OrientedBoundingBox = cloud_pair.clouds[0].get_minimal_oriented_bounding_box()  # noqa: E501
         peak = np.max(bounding_box.extent)
         self.value = 10 * np.log10(peak**2 / geo_mse.value)
         self.is_calculated = True
+
 
 class ColorMetric(DirectionalMetric):
     color_scheme: str
@@ -395,6 +451,7 @@ class ColorMetric(DirectionalMetric):
 
     def _key(self) -> typing.Tuple:
         return super()._key() + (self.color_scheme,)
+
 
 def transform_colors(
     colors: np.ndarray,
@@ -426,6 +483,7 @@ def transform_colors(
         axis=1,
         arr=colors,
     )
+
 
 def get_color_peak(color_scheme: str) -> np.float64:
     colors_to_values = {
@@ -465,9 +523,15 @@ class ColorMSE(ColorMetric):
         self.value = np.mean(diff**2, axis=0)
         self.is_calculated = True
 
+
 class ColorPSNR(ColorMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
-        return {"color_mse": ColorMSE(is_left=self.is_left, color_scheme=self.color_scheme)}
+        return {
+            "color_mse": ColorMSE(
+                is_left=self.is_left,
+                color_scheme=self.color_scheme,
+            ),
+        }
 
     def calculate(
         self,
@@ -477,6 +541,7 @@ class ColorPSNR(ColorMetric):
         peak = get_color_peak(self.color_scheme)
         self.value = 10 * np.log10(peak**2 / color_mse.value)
         self.is_calculated = True
+
 
 class GeoHausdorffDistance(PointToPlaneable):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
@@ -495,6 +560,7 @@ class GeoHausdorffDistance(PointToPlaneable):
         self.value = np.max(euclidean_distance.value, axis=0)
         self.is_calculated = True
 
+
 class GeoHausdorffDistancePSNR(PointToPlaneable):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
         return {
@@ -511,8 +577,11 @@ class GeoHausdorffDistancePSNR(PointToPlaneable):
         max_sqrt: MaxSqrtDistance,
         hausdorff_distance: GeoHausdorffDistance,
     ) -> None:
-        self.value = 10 * np.log10(max_sqrt.value**2 / hausdorff_distance.value)
+        self.value = 10 * np.log10(
+            max_sqrt.value**2 / hausdorff_distance.value,
+        )
         self.is_calculated = True
+
 
 class ColorHausdorffDistance(ColorMetric):
     def calculate(
@@ -548,6 +617,7 @@ class ColorHausdorffDistance(ColorMetric):
         self.value = np.max(diff**2, axis=0)
         self.is_calculated = True
 
+
 class ColorHausdorffDistancePSNR(ColorMetric):
     def _get_dependencies(self) -> typing.Dict[str, AbstractMetric]:
         return {
@@ -565,6 +635,7 @@ class ColorHausdorffDistancePSNR(ColorMetric):
         peak = get_color_peak(self.color_scheme)
         self.value = 10 * np.log10(peak**2 / hausdorff_distance.value)
         self.is_calculated = True
+
 
 class SymmetricMetric(AbstractMetric):
     is_proportional: bool
@@ -584,9 +655,10 @@ class SymmetricMetric(AbstractMetric):
         if len(metrics) != 2:
             raise ValueError("Must be exactly two metrics")
         if metrics[0].__class__ != metrics[1].__class__:
+            lclass = metrics[0].__class__
+            rclass = metrics[1].__class__
             raise ValueError(
-                "Metrics must be of same class, got: {lmetric}, {rmetric}"
-                    .format(lmetric=metrics[0].__class__, rmetric=metrics[1].__class__)
+                f"Metrics must be of same class, got: {lclass}, {rclass}"
             )
         self.metrics = metrics
         self.is_proportional = is_proportional
@@ -600,12 +672,14 @@ class SymmetricMetric(AbstractMetric):
         lmetric: AbstractMetric,
         rmetric: AbstractMetric,
     ) -> None:
-        values = [m.value for m in (lmetric, rmetric)] # value is scalar or ndarray
+        # value is scalar or ndarray
+        values = [m.value for m in (lmetric, rmetric)]
         if self.is_proportional:
             self.value = min(values, key=np.linalg.norm)
         else:
             self.value = max(values, key=np.linalg.norm)
         self.is_calculated = True
+
 
 class CalculateOptions:
     color: typing.Optional[str]
@@ -621,6 +695,7 @@ class CalculateOptions:
         self.color = color
         self.hausdorff = hausdorff
         self.point_to_plane = point_to_plane
+
 
 class CalculateResult:
     _metrics: typing.List[AbstractMetric]
@@ -664,11 +739,12 @@ class CalculateResult:
     def __str__(self) -> str:
         return str(self.as_df())
 
+
 def calculate_from_files(
     ocloud_file: str,
     pcloud_file: str,
     calculate_options: CalculateOptions,
-    ) -> pd.DataFrame:
+) -> pd.DataFrame:
     ocloud, pcloud = map(o3d.io.read_point_cloud, (ocloud_file, pcloud_file))
     cloud_pair = CloudPair(ocloud, pcloud)
     return cloud_pair.calculate(calculate_options).as_df()
