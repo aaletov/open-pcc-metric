@@ -103,7 +103,7 @@ class CloudPair:
         return self._neigh_dists[0]
 
     def get_right_neighbour_distances(self):
-        return self._neigh_dists[0]
+        return self._neigh_dists[1]
 
     def get_boundary_sqrt_distances(self):
         return self.clouds[0].compute_nearest_neighbor_distance()
@@ -115,7 +115,7 @@ class CloudPair:
         return self.clouds[0].colors
 
     def get_right_colors(self):
-        return self.clouds[0].colors
+        return self.clouds[1].colors
 
     def get_left_neighbour_colors(self):
         return self._neigh_clouds[0].colors
