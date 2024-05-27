@@ -61,17 +61,16 @@ def approx(
 
     metric = metrics_dict[variable]
 
+    approx_bpp = np.linspace(bpp[0], bpp[-1], num=100)
     approx_vals = []
     if metric.scale == Scale.LINEAR:
-        fun = lambda t, a, b: a * np.log10(t) + b
-        coefs = spo.curve_fit(fun,  bpp, vals)[0]
-        approx_vals = np.array([fun(t, coefs[0], coefs[1]) for t in bpp])
+        coefs = herm.hermfit(bpp, vals, deg=4)
+        approx_vals = herm.hermval(approx_bpp, coefs)
     elif metric.scale == Scale.LOG:
-        fun = lambda t, a, b: 1 / (a * t + b)
-        coefs = spo.curve_fit(fun,  bpp, vals)[0]
-        approx_vals = np.array([fun(t, coefs[0], coefs[1]) for t in bpp])
+        coefs = herm.hermfit(bpp, np.log10(vals), deg=4)
+        approx_vals = np.power(10, herm.hermval(approx_bpp, coefs))
 
-    ax.plot(bpp, approx_vals, label=alg)
+    ax.plot(approx_bpp, approx_vals, label=alg)
     ax.scatter(bpp, vals)
 
     if metric.scale == Scale.LINEAR:
