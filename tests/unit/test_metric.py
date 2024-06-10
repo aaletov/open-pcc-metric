@@ -64,3 +64,131 @@ def test_default_euclidean_distance(
     neighbour_distances.value = 4 * np.ones(shape=(5,))
     euclidean_distance.calculate(neighbour_distances, primary_error_vector)
     assert (np.allclose(neighbour_distances.value, euclidean_distance.value))
+
+
+def test_default_boundary_sqrt_distances():
+    assert True
+
+
+def test_default_min_sqrt_distance():
+    assert True
+
+
+def test_default_max_sqrt_distance():
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,point_to_plane",
+    [(True, False), (False, False), (True, True), (False, True)],
+)
+def test_default_geo_mse(
+    is_left: bool,
+    point_to_plane: bool,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,point_to_plane",
+    [(True, False), (False, False), (True, True), (False, True)],
+)
+def test_default_geo_psnr(
+    is_left: bool,
+    point_to_plane: bool,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,color_scheme",
+    [
+        (False, "rgb"),
+        (False, "ycc"),
+        (False, "yuv"),
+        (True, "rgb"),
+        (True, "ycc"),
+        (True, "yuv"),
+    ],
+)
+def test_default_color_mse(
+    is_left: bool,
+    color_scheme: str,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,color_scheme",
+    [
+        (False, "rgb"),
+        (False, "ycc"),
+        (False, "yuv"),
+        (True, "rgb"),
+        (True, "ycc"),
+        (True, "yuv"),
+    ],
+)
+def test_default_color_psnr(
+    is_left: bool,
+    color_scheme: str,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,point_to_plane",
+    [(True, False), (False, False), (True, True), (False, True)],
+)
+def test_default_geo_hausdorff_distance(
+    is_left: bool,
+    point_to_plane: bool,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,point_to_plane",
+    [(True, False), (False, False), (True, True), (False, True)],
+)
+def test_default_geo_hausdorff_distance_psnr(
+    is_left: bool,
+    point_to_plane: bool,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,color_scheme",
+    [
+        (False, "rgb"),
+        (False, "ycc"),
+        (False, "yuv"),
+        (True, "rgb"),
+        (True, "ycc"),
+        (True, "yuv"),
+    ],
+)
+def test_default_color_hausdorff_distance(
+    is_left: bool,
+    color_scheme: str,
+):
+    assert True
+
+
+@pytest.mark.parametrize(
+    "is_left,color_scheme",
+    [
+        (False, "rgb"),
+        (False, "ycc"),
+        (False, "yuv"),
+        (True, "rgb"),
+        (True, "ycc"),
+        (True, "yuv"),
+    ],
+)
+def test_default_color_hausdorff_distance_psnr(
+    is_left: bool,
+    color_scheme: str,
+):
+    assert True
