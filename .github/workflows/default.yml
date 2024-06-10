@@ -68,7 +68,7 @@ jobs:
 
   publish-wheel:
     runs-on: ubuntu-latest
-    if: github.event.action == 'create'
+    if: ${{github.event_name == 'push'}}
     needs:
       - linters
       - pytest
