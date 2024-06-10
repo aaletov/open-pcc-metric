@@ -1,0 +1,170 @@
+classDiagram
+  class AbstractMetric {
+    value
+    calculate(cloud_pair: CloudPair)* None
+  }
+  class BoundarySqrtDistances {
+    value : tuple
+    calculate(cloud_pair: CloudPair) None
+  }
+  class CalculateOptions {
+    color : typing.Optional[str]
+    hausdorff : bool
+    point_to_plane : bool
+  }
+  class CalculateResult {
+    as_df() pd.DataFrame
+    as_dict() typing.Dict[str, typing.Any]
+  }
+  class CloudColors {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class CloudExtent {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class CloudNormals {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class CloudPair {
+    clouds : typing.Tuple[PointCloud, PointCloud]
+    origin_cloud
+    reconst_cloud
+    get_boundary_sqrt_distances()
+    get_extent()
+    get_left_colors()
+    get_left_error_vector()
+    get_left_neighbour_colors()
+    get_left_neighbour_distances()
+    get_right_colors()
+    get_right_error_vector()
+    get_right_neighbour_colors()
+    get_right_neighbour_distances()
+  }
+  class ColorHausdorffDistance {
+    value : ndarray
+    calculate(origin_cloud_colors: CloudColors, neighbour_cloud_colors: NeighbourColors) None
+  }
+  class ColorHausdorffDistancePSNR {
+    value
+    calculate(hausdorff_distance: ColorHausdorffDistance) None
+  }
+  class ColorMSE {
+    value : ndarray
+    calculate(origin_cloud_colors: CloudColors, neighbour_cloud_colors: NeighbourColors) None
+  }
+  class ColorMetric {
+    color_scheme : str
+  }
+  class ColorPSNR {
+    value
+    calculate(color_mse: ColorMSE) None
+  }
+  class DirectionalMetric {
+    is_left : bool
+  }
+  class ErrorVector {
+    value : ndarray
+    calculate(primary_error_vector: PrimaryErrorVector, cloud_normals: typing.Optional[CloudNormals]) None
+  }
+  class EuclideanDistance {
+    value
+    calculate(neighbour_distances: typing.Optional[NeighbourDistances], error_vector: typing.Optional[ErrorVector]) None
+  }
+  class GeoHausdorffDistance {
+    value : ndarray
+    calculate(euclidean_distance: EuclideanDistance) None
+  }
+  class GeoHausdorffDistancePSNR {
+    value
+    calculate(max_sqrt: MaxSqrtDistance, hausdorff_distance: GeoHausdorffDistance) None
+  }
+  class GeoMSE {
+    value
+    calculate(euclidean_distance: EuclideanDistance) None
+  }
+  class GeoPSNR {
+    value
+    calculate(cloud_extent: CloudExtent, geo_mse: GeoMSE) None
+  }
+  class MaxSqrtDistance {
+    value
+    calculate(boundary_metric: BoundarySqrtDistances) None
+  }
+  class MetricCalculator {
+    calculate(metrics_list: typing.List[AbstractMetric]) CalculateResult
+  }
+  class MinSqrtDistance {
+    value
+    calculate(boundary_metric: BoundarySqrtDistances) None
+  }
+  class NeighbourColors {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class NeighbourDistances {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class PointToPlaneable {
+    point_to_plane : bool
+  }
+  class PrimaryErrorVector {
+    value
+    calculate(cloud_pair: CloudPair) None
+  }
+  class PrimaryMetric {
+    calculate(cloud_pair: CloudPair)* None
+  }
+  class SecondaryMetric {
+    calculate()* None
+  }
+  class SymmetricMetric {
+    is_proportional : bool
+    metrics : typing.List[DirectionalMetric]
+    value
+    calculate(lmetric: AbstractMetric, rmetric: AbstractMetric) None
+  }
+  BoundarySqrtDistances --|> PrimaryMetric
+  CloudColors --|> DirectionalMetric
+  CloudColors --|> PrimaryMetric
+  CloudExtent --|> PrimaryMetric
+  CloudNormals --|> DirectionalMetric
+  CloudNormals --|> PrimaryMetric
+  ColorHausdorffDistance --|> ColorMetric
+  ColorHausdorffDistance --|> SecondaryMetric
+  ColorHausdorffDistancePSNR --|> ColorMetric
+  ColorHausdorffDistancePSNR --|> SecondaryMetric
+  ColorMSE --|> ColorMetric
+  ColorMSE --|> SecondaryMetric
+  ColorMetric --|> DirectionalMetric
+  ColorPSNR --|> ColorMetric
+  ColorPSNR --|> SecondaryMetric
+  DirectionalMetric --|> AbstractMetric
+  ErrorVector --|> PointToPlaneable
+  ErrorVector --|> SecondaryMetric
+  EuclideanDistance --|> PointToPlaneable
+  EuclideanDistance --|> SecondaryMetric
+  GeoHausdorffDistance --|> PointToPlaneable
+  GeoHausdorffDistance --|> SecondaryMetric
+  GeoHausdorffDistancePSNR --|> PointToPlaneable
+  GeoHausdorffDistancePSNR --|> SecondaryMetric
+  GeoMSE --|> PointToPlaneable
+  GeoMSE --|> SecondaryMetric
+  GeoPSNR --|> PointToPlaneable
+  GeoPSNR --|> SecondaryMetric
+  MaxSqrtDistance --|> SecondaryMetric
+  MinSqrtDistance --|> SecondaryMetric
+  NeighbourColors --|> DirectionalMetric
+  NeighbourColors --|> PrimaryMetric
+  NeighbourDistances --|> DirectionalMetric
+  NeighbourDistances --|> PrimaryMetric
+  PointToPlaneable --|> DirectionalMetric
+  PrimaryErrorVector --|> DirectionalMetric
+  PrimaryErrorVector --|> PrimaryMetric
+  PrimaryMetric --|> AbstractMetric
+  SecondaryMetric --|> AbstractMetric
+  SymmetricMetric --|> SecondaryMetric
+  CloudPair --* MetricCalculator : _cloud_pair

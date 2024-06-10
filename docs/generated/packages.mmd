@@ -1,0 +1,26 @@
+classDiagram
+  class open_pcc_metric {
+  }
+  class __main__ {
+  }
+  class calculator {
+  }
+  class cloud_pair {
+  }
+  class handler {
+  }
+  class logger {
+  }
+  class metric {
+  }
+  class options {
+  }
+  calculator --> cloud_pair
+  calculator --> logger
+  calculator --> metric
+  handler --> calculator
+  handler --> cloud_pair
+  handler --> options
+  metric --> cloud_pair
+  metric --> logger
+  options --> metric

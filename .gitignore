@@ -163,3 +163,7 @@ files/
 logs/
 
 pc_error
+
+_other
+.vscode
+.devcontainer
