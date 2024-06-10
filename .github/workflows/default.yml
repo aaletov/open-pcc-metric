@@ -68,7 +68,7 @@ jobs:
 
   publish-wheel:
     runs-on: ubuntu-latest
-    if: github.event.action == 'create'
+    if: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags/')}}
     needs:
       - linters
       - pytest
@@ -87,5 +87,5 @@ jobs:
         $POETRY_HOME/bin/poetry --version
     - name: Build and publish
       run: |
-        $POETRY_HOME/bin/poetry config pypi-token.pypi ${{ env.PYPI_TOKEN }}
+        $POETRY_HOME/bin/poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
         $POETRY_HOME/bin/poetry publish --build
