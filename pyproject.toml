@@ -25,6 +25,7 @@ pyquaternion = "0.9.9"
 pylint = "^3.2.0"
 pytest = "^8.2.0"
 flake8 = "^7.0.0"
+pytest-cov = "^5.0.0"
 
 [build-system]
 requires = ["poetry-core"]
