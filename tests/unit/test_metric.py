@@ -3,6 +3,10 @@ import open3d as o3d
 import numpy as np
 import open_pcc_metric.metric as opmm
 
+from open_pcc_metric.cloud_pair import CloudPair
+from open_pcc_metric.calculator import MetricCalculator
+from open_pcc_metric.options import CalculateOptions, transform_options
+
 default_nrows = 3
 
 
@@ -191,4 +195,29 @@ def test_default_color_hausdorff_distance_psnr(
     is_left: bool,
     color_scheme: str,
 ):
+    assert True
+
+
+def test_coverage():
+    demo_cloud = o3d.data.DemoCropPointCloud()
+    origin_cloud = o3d.io.read_point_cloud(demo_cloud.point_cloud_path)
+    reconst_cloud = o3d.geometry.PointCloud()
+
+    reconst_points = np.copy(origin_cloud.points)
+    reconst_colors = np.copy(origin_cloud.colors)
+    noise = np.random.normal(0.0, 1e-1, size=reconst_points.shape)
+    reconst_points += noise
+    reconst_colors += noise
+    reconst_cloud.points = o3d.utility.Vector3dVector(reconst_points)
+    reconst_cloud.colors = o3d.utility.Vector3dVector(reconst_colors)
+
+    cloud_pair = CloudPair(origin_cloud, reconst_cloud)
+    calculator = MetricCalculator(cloud_pair)
+    options = CalculateOptions(
+        color="ycc",
+        hausdorff=True,
+        point_to_plane=True,
+    )
+    metrics = transform_options(options)
+    _ = calculator.calculate(metrics).as_df()
     assert True
